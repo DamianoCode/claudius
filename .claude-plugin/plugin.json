@@ -1,7 +1,7 @@
 {
   "name": "claudius",
   "displayName": "Claudius",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "description": "An implementation workflow for real engineering: a risk-classifying orchestrator, four tiered subagents, and the disciplines that stop the two expensive failures — building the wrong thing, and fixing a bug you never located.",
   "author": {
     "name": "DamianoCode"

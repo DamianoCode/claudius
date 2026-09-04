@@ -86,14 +86,19 @@ SCOPE: <paths>
 ASSUMPTIONS: <none or short list>
 
 CHANGED:
-- <file> — <what changed and why>
+- <path:line> — <what changed and why, anchored on the key symbol>
 
 TESTS: <added/updated or none>
-PUBLIC CONTRACT: <changed items or none>
+PUBLIC CONTRACT: <surface a caller now depends on, or none>
 HANDOFF: <outside-scope exact changes or none>
 VERIFY:
 - <command> -> <PASS/FAIL/NOT RUN + short reason>
 RISKS / FOLLOW-UPS: <material items or none>
 ```
 
-Never claim a command passed unless you actually ran it.
+Two of those lines exist to stop the caller reopening your files, which would undo the point of running you as a separate context:
+
+- **`CHANGED` takes `path:line`**, pointing at the symbol that carries the change — not the file alone. A bare filename makes the caller search for what you did.
+- **`PUBLIC CONTRACT` means anything a caller now depends on**, not only externally published API. A helper module you introduced, its exported names and what they take, belongs here — otherwise the caller has to read your new file to use it. Write `none` only when nothing outside your own edits could call into them.
+
+Never claim a command passed unless you actually ran it. When a check is weaker than its name suggests — it exercises a shortcut rather than the behaviour, or asserts timing where behaviour was meant — say so on that line rather than reporting a clean `PASS`.
