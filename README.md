@@ -42,7 +42,7 @@ The bottom three fire on their own when the task calls for them; you never type 
 
 `Explore` (haiku, read-only recon) · `clean-code-engineer` (sonnet, implementation inside an explicit write scope) · `test-runner` (haiku, isolated verification) · `code-reviewer` (opus, review on one explicit axis).
 
-The model tiering is deliberate: reconnaissance and verification are cheap and mechanical, review is where judgement has to be paid for. Ordinary implementation stays in the main conversation, which already holds the context — a worker has to buy more than the briefing, the report and the integration read it costs.
+The model tiering is deliberate: reconnaissance and verification are cheap and mechanical, review is where judgement has to be paid for. Who writes the implementation is not fixed — it is decided per task by comparing the size of an honest brief against the size of the work, because a worker's exploration dies with its context while the same work done in the main conversation stays there for the rest of the session.
 
 ### Hooks
 

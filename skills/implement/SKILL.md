@@ -76,11 +76,16 @@ When a genuinely new or contested domain term gets settled, call the Skill tool 
 
 ## 4. Implement and verify
 
-**Write the code in the main conversation** for ordinary work. You already hold the context, and delegating only to read the whole diff back at integration buys nothing.
+**Who writes the code is a ratio, not a default.** Weigh the size of an honest brief against the size of the work it would describe.
 
-Read [QUALITY.md](./QUALITY.md) before the first edit. The bar it sets applies to whoever writes the code — the stronger model in this conversation does not get to skip the checklist a delegated worker would have been held to.
+- **Send a `clean-code-engineer`** when the work is mechanical and specifiable — a test suite, boilerplate, the same edit repeated across many files, a migration — so that a few hundred tokens of brief buy thousands of tokens of work. Two provably disjoint scopes that can run at once qualify too.
+- **Write it here** when the decisions are dense: when the brief would approach the size of the result, or when every other paragraph is a judgement the worker can neither make nor ask about.
 
-Send a `clean-code-engineer` when the work is genuinely large, when two scopes are provably disjoint and can run in parallel, or when the implementation would flood this context with detail nobody needs afterwards. Brief it per [CONTRACT.md](./CONTRACT.md); the rules for running a parallel wave are in [CLASSIFY.md](./CLASSIFY.md).
+Both sides cost something real. A worker's exploration — every file read, every dead end, every screen of test output — dies with its context, while the same work done here stays in this conversation for the rest of the session; on a typical multi-file change that is roughly four times less of this context spent, counting the report and the diff you still have to read at integration. Against that: the model here is stronger, it already holds the conversation, and a brief that turns out to be incomplete costs the repair twice. Neither consideration wins in general — decide per task, and say in one line which way you went and why.
+
+Read [QUALITY.md](./QUALITY.md) before the first edit. The bar applies to whoever writes the code: the stronger model in this conversation does not get to skip the checklist a delegated worker would have been held to.
+
+Brief a worker per [CONTRACT.md](./CONTRACT.md); the rules for running a parallel wave are in [CLASSIFY.md](./CLASSIFY.md).
 
 Then verify the combined result:
 
