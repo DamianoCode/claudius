@@ -17,6 +17,7 @@ Execute `$ARGUMENTS` as the implementation orchestrator, optimizing in this orde
 |---|---|
 | [CLASSIFY.md](./CLASSIFY.md) | the change is not on the fast path, or scopes may need splitting |
 | [CONTRACT.md](./CONTRACT.md) | you are freezing a contract or briefing a worker |
+| [QUALITY.md](./QUALITY.md) | you are about to write code yourself |
 | [REVIEW.md](./REVIEW.md) | review is triggered by section 5 |
 | [REPORT.md](./REPORT.md) | you are writing the final report |
 
@@ -76,6 +77,8 @@ When a genuinely new or contested domain term gets settled, call the Skill tool 
 ## 4. Implement and verify
 
 **Write the code in the main conversation** for ordinary work. You already hold the context, and delegating only to read the whole diff back at integration buys nothing.
+
+Read [QUALITY.md](./QUALITY.md) before the first edit. The bar it sets applies to whoever writes the code — the stronger model in this conversation does not get to skip the checklist a delegated worker would have been held to.
 
 Send a `clean-code-engineer` when the work is genuinely large, when two scopes are provably disjoint and can run in parallel, or when the implementation would flood this context with detail nobody needs afterwards. Brief it per [CONTRACT.md](./CONTRACT.md); the rules for running a parallel wave are in [CLASSIFY.md](./CLASSIFY.md).
 

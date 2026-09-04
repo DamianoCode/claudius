@@ -42,6 +42,10 @@ For a bug fix, identify the concrete failure path. For a refactor, preserve exte
 
 ## 3. Implementation quality
 
+These rules are shared with the orchestrator, whose `skills/implement/QUALITY.md` is the
+canonical copy; they are repeated here because these instructions must stand alone. A test
+fails if the two lists drift, so edit the canonical file and mirror it here.
+
 - Prefer a complete vertical change over a partial scaffold.
 - Match neighboring architecture, naming, error handling, validation and test style.
 - Reuse existing abstractions before creating new ones.
