@@ -42,6 +42,10 @@ For a bug fix, identify the concrete failure path. For a refactor, preserve exte
 
 ## 3. Implementation quality
 
+These rules are shared with the orchestrator, whose `skills/implement/QUALITY.md` is the
+canonical copy; they are repeated here because these instructions must stand alone. A test
+fails if the two lists drift, so edit the canonical file and mirror it here.
+
 - Prefer a complete vertical change over a partial scaffold.
 - Match neighboring architecture, naming, error handling, validation and test style.
 - Reuse existing abstractions before creating new ones.
@@ -75,21 +79,21 @@ A normal implementation task should end only after an `Edit`/`Write` or after an
 - `NO_CHANGE: <evidence>` — requested state already exists.
 - `BLOCKED: <specific prerequisite>` — safe completion is impossible within the assigned contract/scope.
 
-Return in Polish, compact but complete:
+Report in the user's language, compact but complete. **Keep the block's keys exactly as written, in English** — the `SubagentStop` guard looks for them, and a translated key reads as a missing report:
 
 ```text
 SCOPE: <paths>
-ASSUMPTIONS: <brak or short list>
+ASSUMPTIONS: <none or short list>
 
 CHANGED:
 - <file> — <what changed and why>
 
-TESTS: <added/updated or brak>
-PUBLIC CONTRACT: <changed items or brak>
-HANDOFF: <outside-scope exact changes or brak>
+TESTS: <added/updated or none>
+PUBLIC CONTRACT: <changed items or none>
+HANDOFF: <outside-scope exact changes or none>
 VERIFY:
 - <command> -> <PASS/FAIL/NOT RUN + short reason>
-RISKS / FOLLOW-UPS: <material items or brak>
+RISKS / FOLLOW-UPS: <material items or none>
 ```
 
 Never claim a command passed unless you actually ran it.

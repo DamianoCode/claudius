@@ -40,11 +40,11 @@ Before writing, confirm the target path does not sit inside the repository worki
 
 ### Challenge against the glossary
 
-When the user uses a term that conflicts with what `CONTEXT.md` already defines, call it out immediately. "Glosariusz definiuje *X* jako A, a Ty chyba masz na myśli B. Które?"
+When the user uses a term that conflicts with what `CONTEXT.md` already defines, call it out immediately. "The glossary defines *X* as A, but you seem to mean B. Which is it?"
 
 ### Sharpen fuzzy language
 
-When a term is vague or overloaded, propose a precise canonical term. "Mówisz *konto* — masz na myśli klienta czy użytkownika? To różne rzeczy." Pick one, put the rest under `_Avoid_`.
+When a term is vague or overloaded, propose a precise canonical term. "You say *account* — do you mean the customer or the user? Those are different things." Pick one, put the rest under `_Avoid_`.
 
 ### Discuss concrete scenarios
 
@@ -52,7 +52,7 @@ Stress-test relationships with specific scenarios. Invent edge cases that force 
 
 ### Cross-reference with code
 
-When the user states how something works, check whether the code agrees. Surface contradictions: "W kodzie ta operacja działa na całości, a mówisz, że częściowa jest możliwa. Które jest prawdą?"
+When the user states how something works, check whether the code agrees. Surface contradictions: "In the code this operation works on the whole thing, but you say a partial one is possible. Which is true?"
 
 ### Update CONTEXT.md inline
 
@@ -72,6 +72,6 @@ If any one is missing, skip it. Format: [ADR-FORMAT.md](./ADR-FORMAT.md).
 
 ## Seeding an empty glossary
 
-When `CONTEXT.md` does not exist yet, do not invent terms. Harvest candidates from evidence — data-model and enum names, module, service and queue names, the vocabulary in recent commit messages and tickets — then put the ambiguous ones to the user as choices, a handful per round. A term enters the glossary only once the user has confirmed its definition.
+When `CONTEXT.md` does not exist yet, do not invent terms. Harvest candidates from evidence — data-model and enum names, module, service and queue names, the vocabulary in recent commit messages and tickets — then put the ambiguous ones to the user with the **AskUserQuestion** tool, up to four terms per round, each definition an option with your best reading marked as the recommendation. A term enters the glossary only once the user has confirmed its definition.
 
 Ten confirmed terms beat fifty guessed ones: a wrong glossary is worse than none, because everything downstream then uses the wrong word confidently.
