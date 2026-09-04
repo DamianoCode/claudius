@@ -56,6 +56,35 @@ test('every hook declares a timeout, so a stuck hook cannot hang a session', () 
   }
 });
 
+// --- the plugin manifest must not re-declare what is loaded automatically ---
+
+test('the manifest does not point at the standard hooks file', () => {
+  // Claude Code loads hooks/hooks.json by itself. Naming it in the manifest as well
+  // registers the same file twice, and the whole plugin's hooks then fail to load:
+  // "Duplicate hooks file detected". manifest.hooks is only for additional files.
+  const manifest = JSON.parse(readFileSync(join(REPO_ROOT, '.claude-plugin', 'plugin.json'), 'utf8'));
+  const declared = [manifest.hooks ?? []].flat();
+
+  for (const entry of declared) {
+    assert.notEqual(
+      entry.replace(/^\.\//, ''),
+      'hooks/hooks.json',
+      'hooks/hooks.json is loaded automatically; naming it here breaks hook loading entirely',
+    );
+  }
+});
+
+test('every agent the manifest lists exists on disk', () => {
+  const manifest = JSON.parse(readFileSync(join(REPO_ROOT, '.claude-plugin', 'plugin.json'), 'utf8'));
+
+  for (const entry of manifest.agents ?? []) {
+    assert.ok(
+      existsSync(join(REPO_ROOT, entry.replace(/^\.\//, ''))),
+      `the manifest lists ${entry}, which does not exist`,
+    );
+  }
+});
+
 // --- the SubagentStop matcher and the guarded agents agree ---
 
 test('the SubagentStop matcher lists exactly the agents whose completion is enforced', () => {
