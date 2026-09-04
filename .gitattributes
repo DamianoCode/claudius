@@ -1,0 +1,16 @@
+# Everything here is text: Markdown that a model reads and .mjs that node executes.
+# CRLF buys nothing in either case, and a checkout that rewrites line endings turns an
+# edit of one line into a whole-file diff. Normalise on commit and on checkout, so the
+# repository looks the same from Windows, Linux and CI.
+* text=auto eol=lf
+
+# The hooks are executed directly; keep them LF regardless of any local core.autocrlf.
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+
+# No binaries today — the markers are here so a future asset is not silently mangled.
+*.png binary
+*.jpg binary
+*.ico binary
