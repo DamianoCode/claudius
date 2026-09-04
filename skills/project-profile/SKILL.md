@@ -24,7 +24,7 @@ Take the basename and write to `~/.claude/context/<basename>/PROJECT.md`. Confir
 
 ## What to probe
 
-Read rather than ask, then ask only about what the repository cannot tell you.
+Read rather than ask, then ask only about what the repository cannot tell you — and when you do ask, use the **AskUserQuestion** tool so the user picks an option instead of typing prose. Put your best reading of the evidence first, marked as the recommendation. Batch the gaps into one round of up to four questions rather than interrupting repeatedly.
 
 1. **Stack and layout** — manifests (`package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, …), workspace config, the app and library folders, what each one is.
 2. **Commands, verified** — scripts in the manifest, task-runner targets (`nx show project <p> --json`, `turbo`, `make -qp`, `just --list`), the test runner actually configured, how to run **one** test file, typecheck, lint, build, and how to start the service locally. Note platform quirks (shell, env prefixes).
@@ -47,6 +47,6 @@ Write the overlay with these headings, dropping any that the project genuinely h
 
 `# <repo> — overlay` (with the verification date) · Stack · Commands · Seams and test coverage · Feedback-loop building blocks · Recurring hazards · Hard rules the reviewer enforces · Git · Tracker.
 
-Keep it dense and factual — a table beats a paragraph. Target one to two screens; this file is read on most runs, so every line must earn its place. Mark anything unverified explicitly as `do potwierdzenia`.
+Keep it dense and factual — a table beats a paragraph. Target one to two screens; this file is read on most runs, so every line must earn its place. Mark anything unverified explicitly as `unverified`.
 
-Finish by reporting, in Polish, what was written, which facts you verified by running something, and which remain unconfirmed.
+Finish by reporting, in the user's language, what was written, which facts you verified by running something, and which remain unconfirmed.
