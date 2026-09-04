@@ -58,7 +58,7 @@ The goal is not a clean repro but a **higher reproduction rate**. Loop the trigg
 
 ### When you genuinely cannot build a loop
 
-Stop and say so. List what you tried. Ask for one of: access to the environment that reproduces it, a redacted captured artifact (payload, log dump, screen recording with timestamps), or permission to add temporary instrumentation. **Do not proceed to hypothesise without a loop.**
+Stop and say so, and list what you tried. Then put the way forward to the user with the **AskUserQuestion** tool, recommending the option most likely to unblock you: access to the environment that reproduces it, a redacted captured artifact (payload, log dump, screen recording with timestamps), or permission to add temporary instrumentation. **Do not proceed to hypothesise without a loop.**
 
 ### Completion criterion
 
@@ -93,7 +93,7 @@ Each must be falsifiable: state its prediction.
 
 No prediction means it is a vibe — sharpen or discard it.
 
-**Show the ranked list to the user before testing.** They often re-rank it instantly ("we deployed exactly that on Tuesday") or have already ruled one out. Cheap checkpoint, large saving. Do not block on it — proceed with your ranking if there is no answer.
+**Show the ranked list to the user before testing**, with the **AskUserQuestion** tool — your top-ranked hypothesis first, each option carrying its falsifiable prediction. They often re-rank it instantly ("we deployed exactly that on Tuesday") or have already ruled one out. Cheap checkpoint, large saving. Do not block on it — proceed with your ranking if there is no answer.
 
 ## Phase 4: Instrument
 
