@@ -1,0 +1,27 @@
+{
+  "name": "claudius",
+  "displayName": "Claudius",
+  "version": "0.1.0",
+  "description": "An implementation workflow for real engineering: a risk-classifying orchestrator, four tiered subagents, and the disciplines that stop the two expensive failures — building the wrong thing, and fixing a bug you never located.",
+  "author": {
+    "name": "DamianoCode"
+  },
+  "repository": "https://github.com/DamianoCode/claudius",
+  "license": "MIT",
+  "keywords": [
+    "implement",
+    "code-review",
+    "debugging",
+    "domain-modeling",
+    "subagents",
+    "hooks"
+  ],
+  "skills": "./skills/",
+  "agents": [
+    "./agents/Explore.md",
+    "./agents/clean-code-engineer.md",
+    "./agents/code-reviewer.md",
+    "./agents/test-runner.md"
+  ],
+  "hooks": "./hooks/hooks.json"
+}
