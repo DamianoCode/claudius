@@ -14,8 +14,10 @@ Nothing here is a process framework. Every piece is a plain Markdown file you ar
 Then, once per repository:
 
 ```
-/project-profile
+/claudius:project-profile
 ```
+
+**Plugin skills are always namespaced** with the plugin name, so everything you type here starts with `claudius:`. Rename the `name` field in `plugin.json` if you fork this and want a shorter prefix.
 
 That builds a private overlay — commands, seams, hazards, rules — outside the repository, so the skills act concretely without carrying any one project's details in their own text.
 
@@ -23,14 +25,16 @@ That builds a private overlay — commands, seams, hazards, rules — outside th
 
 ### Skills
 
-| Skill | Invocation | What it does |
+| Skill | Invoked by | What it does |
 |---|---|---|
-| `/implement` | you | The orchestrator. Classifies MICRO / STANDARD / COMPLEX / PARALLEL, freezes a contract, dispatches workers, integrates, verifies, reviews, and reports from `git`, not from memory. |
-| `/grill` | you | Relentless interview before code. Design tree worked in rounds, every question carrying a recommended answer. Produces the acceptance criteria `/implement` then freezes. |
-| `/diagnose` | model | Six-phase bug discipline. Phase 1 is the whole skill: **no red-capable command, no hypotheses.** |
-| `/project-profile` | you | Builds the private per-project overlay. Verified commands only. |
-| `domain-model` | model | Glossary and decision records — kept private, never written into the repository. |
-| `codebase-design` | model | Vocabulary for deep modules: interface, depth, seam, adapter, leverage, locality. |
+| `/claudius:implement` | you | The orchestrator. Classifies MICRO / STANDARD / COMPLEX / PARALLEL, freezes a contract, dispatches workers, integrates, verifies, reviews, and reports from `git`, not from memory. |
+| `/claudius:grill` | you | Relentless interview before code. Design tree worked in rounds, every question carrying a recommended answer. Produces the acceptance criteria `implement` then freezes. |
+| `/claudius:project-profile` | you | Builds the private per-project overlay. Verified commands only. |
+| `claudius:diagnose` | model | Six-phase bug discipline. Phase 1 is the whole skill: **no red-capable command, no hypotheses.** |
+| `claudius:domain-model` | model | Glossary and decision records — kept private, never written into the repository. |
+| `claudius:codebase-design` | model | Vocabulary for deep modules: interface, depth, seam, adapter, leverage, locality. |
+
+The bottom three fire on their own when the task calls for them; you never type those.
 
 ### Agents
 
@@ -58,6 +62,16 @@ Two files live per repository under `~/.claude/context/<repo-basename>/`, and **
 - `CONTEXT.md` — the domain glossary. Written by `domain-model`, one confirmed term at a time.
 
 Both are optional. Without them every skill still works; it just re-derives the same facts from the repository on each run.
+
+## If you already run these files standalone
+
+Installing the plugin on top of a `~/.claude/` copy of the same kit does **not** cleanly replace it:
+
+- **Skills** coexist. Namespacing means `/implement` and `/claudius:implement` both stay available — two copies that will drift.
+- **Agents** do not. A user or project `.claude/agents/` definition overrides a same-named plugin agent, so the plugin's agents stay inert until the originals are removed.
+- **Hooks** double up. Both the `settings.json` entries and the plugin's `hooks.json` fire.
+
+Pick one or the other: either keep the standalone files, or delete them and the hook entries from `settings.json` and let the plugin own the kit.
 
 ## Credits
 
