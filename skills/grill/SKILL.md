@@ -1,15 +1,15 @@
 ---
 name: grill
-description: Relentless interview that stress-tests a plan, design or feature request before any code is written. Use when the user says "grill me", "przepytaj mnie", "dopytaj", when a request is large or ambiguous, or before starting COMPLEX / HIGH-RISK work.
+description: Relentless alignment interview that stress-tests a plan, design or feature request before any code is written. Use when the user says "grill me", "przepytaj mnie", "dopytaj", when a request is large or ambiguous, or before starting COMPLEX / HIGH-RISK work.
 disable-model-invocation: true
-argument-hint: "[temat]"
+argument-hint: "[topic]"
 ---
 
 # Grill
 
-Interview the user relentlessly until you reach a shared understanding of `$ARGUMENTS`. The most common failure in this repository is not bad code — it is building the wrong thing correctly. This skill exists to make that failure visible before implementation, not after.
+Interview the user relentlessly until you reach a shared understanding of `$ARGUMENTS`. The most common failure in a codebase is not bad code — it is **building the wrong thing correctly**. This skill exists to make that failure visible before implementation, not after.
 
-Answer in Polish. The user is the domain expert; you are the one who has to be sure.
+Respond in the user's language. The user is the domain expert; you are the one who has to be sure.
 
 ## The design tree
 
@@ -17,25 +17,20 @@ Map the work as a **design tree**: every decision branches into the decisions th
 
 The **frontier** is every decision whose prerequisites are already settled — the questions you can ask *now* without guessing at answers you have not heard yet.
 
-Work the tree in **rounds**. Ask the whole frontier in one round, numbered, each with **your recommended answer**. Then wait.
+Work the tree in **rounds**. Ask the whole frontier in one round, then wait. A question whose answer depends on another question still open in this round belongs to a *later* round.
 
-A question whose answer depends on another question still open in this round belongs to a *later* round, not this one.
+## Ask with the wizard, not with a wall of text
 
-## Round format
+Put each round to the user with the **AskUserQuestion** tool, so they pick instead of typing.
 
-```
-❓ **P1 — <tytuł pytania>**: <treść, może być kilka akapitów, może zawierać warianty do wyboru>
+- Up to four questions per round, two to four options each. Free text stays available through "Other".
+- **Your recommendation goes first and says so** — mark it `(Recommended)`, translated into the user's language. A wrong recommendation they correct in three words is more useful than an open question.
+- Each option's description says what choosing it actually means, including the cost. Options must be genuinely different, not the same answer at three volumes.
+- The `header` is a short label, not a sentence.
 
-➡️ <twoja rekomendowana odpowiedź>
+Fall back to numbered markdown only when a question genuinely cannot fit — more than four real alternatives, or an answer that has to be prose. Never split one decision into two questions just to fit the tool.
 
----
-
-❓ **P2 — <tytuł pytania>**: <treść>
-
-➡️ <twoja rekomendowana odpowiedź>
-```
-
-Always give a recommendation. "Nie wiem, co wolisz" wastes the user's turn — a wrong recommendation they correct in three words is more useful than an open question.
+When a round would exceed four questions, ask the four that unlock the most and leave the rest to the next round. That is the frontier working as intended, not a compromise.
 
 ## Facts are your job, decisions are theirs
 
@@ -54,7 +49,7 @@ Push hardest where being wrong is expensive:
 - **Data and history.** Does this change existing rows, or only new ones? Is a backfill expected? Who owns the data that is wrong today?
 - **Permissions.** Who may do this, and what someone without the right should see.
 - **Blast radius.** Every user or one segment? Does behaviour already differ per tenant, environment or configuration?
-- **Side effects that leave the system** — writes to third parties, money, stock, messages sent. These are the ones that cannot be undone by a revert.
+- **Side effects that leave the system** — writes to third parties, money, stock, messages sent. These cannot be undone by a revert.
 - **What is explicitly out of scope.** The no-s prevent scope creep more reliably than the yes-s.
 - **How we will know it worked.** Observable acceptance criteria, in the user's words.
 
@@ -64,24 +59,32 @@ Read `~/.claude/context/<repo-basename>/PROJECT.md` if it exists and add its "Re
 
 The session is done when the frontier is empty: every branch visited, nothing silently assumed.
 
-Then produce, in Polish:
+Then produce the block below. **Keep the headings exactly as written, in English**, so `claudius:implement` and `code-reviewer` can find them; write the content in the user's language.
 
 ```text
-USTALENIA
-- <decyzja 1>
-- <decyzja 2>
+DECISIONS
+- <decision 1>
+- <decision 2>
 
-POZA ZAKRESEM
-- <czego świadomie nie robimy>
+OUT OF SCOPE
+- <what we are deliberately not doing>
 
-KRYTERIA AKCEPTACJI
-- <obserwowalne zachowanie 1>
-- <obserwowalne zachowanie 2>
+ACCEPTANCE CRITERIA
+- <observable behavior 1>
+- <observable behavior 2>
 
-OTWARTE RYZYKA
-- <co nadal nie jest pewne i co z tym zrobimy>
+OPEN RISKS
+- <what is still uncertain, and what we will do about it>
 ```
 
-If new domain terms were settled or renamed during the interview, call the Skill tool with "domain-model" — or `claudius:domain-model` when this kit is installed as a plugin — to record them.
+If new domain terms were settled or renamed during the interview, call the Skill tool with "claudius:domain-model" to record them (drop the prefix when running this kit standalone).
 
-**Do not start implementing until the user confirms the shared understanding.** Hand the block above to `/implement` as the task description.
+## Handing off
+
+**Do not start implementing.** `implement` is reserved for explicit user invocation and cannot be called from here — so close the interview by asking the user to run it, and give them the exact line to type:
+
+```
+/claudius:implement <task>, per the frozen DECISIONS / OUT OF SCOPE / ACCEPTANCE CRITERIA block above
+```
+
+The conversation already carries the block, so they never have to paste it back.

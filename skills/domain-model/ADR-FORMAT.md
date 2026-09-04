@@ -4,12 +4,14 @@ ADRs live at `~/.claude/context/<repo-basename>/adr/`, numbered sequentially: `0
 
 Create the directory lazily, when the first ADR is needed. Scan for the highest existing number and increment.
 
+Write the ADR in the language the team actually uses; the structure below is what matters, not the English wording of its headings.
+
 ## Template
 
 ```md
-# <Krótki tytuł decyzji>
+# <Short decision title>
 
-<1-3 zdania: jaki był kontekst, co zdecydowaliśmy i dlaczego.>
+<1-3 sentences: what the context was, what we decided, and why.>
 ```
 
 That is it. An ADR can be one paragraph. The value is in recording **that** a decision was made and **why**, not in filling out sections.
@@ -19,8 +21,8 @@ That is it. An ADR can be one paragraph. The value is in recording **that** a de
 Include only when they genuinely add something. Most ADRs need none of them.
 
 - **Status** (`proposed | accepted | deprecated | superseded by ADR-NNNN`) — useful once decisions start being revisited.
-- **Rozważane opcje** — only when the rejected alternatives are worth remembering.
-- **Konsekwencje** — only when non-obvious downstream effects need calling out.
+- **Options considered** — only when the rejected alternatives are worth remembering.
+- **Consequences** — only when non-obvious downstream effects need calling out.
 
 ## What qualifies
 

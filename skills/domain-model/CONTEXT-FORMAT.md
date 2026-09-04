@@ -2,22 +2,24 @@
 
 Lives at `~/.claude/context/<repo-basename>/CONTEXT.md`. Never in the repository.
 
+Write the glossary in the language the team actually speaks; the structure below is what matters, not the English wording of its headings.
+
 ## Structure
 
 ```md
-# <Nazwa kontekstu>
+# <Context name>
 
-<Jedno-dwa zdania: czym jest ten kontekst i po co istnieje.>
+<One or two sentences: what this context is and why it exists.>
 
-## Język
+## Language
 
-**<Termin>**:
-<Jedno-dwa zdania definicji: czym to JEST, nie co robi.>
-_Avoid_: <odrzucone synonimy>
+**<Term>**:
+<One or two sentences: what it IS, not what it does.>
+_Avoid_: <rejected synonyms>
 
-**<Kolejny termin>**:
-<Definicja.>
-_Avoid_: <odrzucone synonimy>
+**<Next term>**:
+<Definition.>
+_Avoid_: <rejected synonyms>
 ```
 
 ## Rules
@@ -30,10 +32,10 @@ _Avoid_: <odrzucone synonimy>
 - **Record ambiguities you resolved**, so the same argument is not reopened:
 
 ```md
-## Rozstrzygnięte niejednoznaczności
+## Resolved ambiguities
 
-- "<słowo>" znaczyło jednocześnie A i B.
-  Rozstrzygnięcie: A = **<termin 1>**, B = **<termin 2>**.
+- "<word>" meant both A and B.
+  Resolution: A = **<term 1>**, B = **<term 2>**.
 ```
 
 ## Bilingual note
@@ -41,7 +43,7 @@ _Avoid_: <odrzucone synonimy>
 Keep the term itself in whatever language the team actually speaks at the whiteboard, and give the identifier used in code alongside it when the two differ, so the glossary connects speech to symbols:
 
 ```md
-**<Termin mówiony>** (`<IdentyfikatorWKodzie>`):
-<Definicja.>
-_Avoid_: <odrzucone synonimy>
+**<Spoken term>** (`<IdentifierInCode>`):
+<Definition.>
+_Avoid_: <rejected synonyms>
 ```
