@@ -7,273 +7,104 @@ argument-hint: "[task]"
 
 # Implement
 
-Execute `$ARGUMENTS` as the implementation orchestrator. Optimize for this order:
+Execute `$ARGUMENTS` as the implementation orchestrator, optimizing in this order: correctness and completeness, verifiable behavior, predictable execution, token efficiency. Token efficiency means avoiding duplicated context and unnecessary agents — never skipping useful engineering work.
 
-1. correctness and completeness,
-2. verifiable behavior,
-3. predictable/fast execution,
-4. token efficiency.
+**Naming.** Sibling skills are written namespaced throughout — `claudius:diagnose` for a Skill-tool call, `/claudius:project-profile` for something the user types. Running this kit standalone from `~/.claude/` rather than as a plugin, drop the `claudius:` prefix everywhere.
 
-Token efficiency means avoiding duplicated context and unnecessary agents, not skipping useful engineering work.
+**Reference files — read one only when you reach the phase that needs it.** Most tasks need none.
 
-Skill names below are written unprefixed (`grill`, `diagnose`, `domain-model`, `project-profile`). When this kit is installed as a plugin its skills are namespaced, so pass `claudius:grill` instead of `grill` — the same applies to every skill named in this file.
+| File | Read it when |
+|---|---|
+| [CLASSIFY.md](./CLASSIFY.md) | the change is not on the fast path, or scopes may need splitting |
+| [CONTRACT.md](./CONTRACT.md) | you are freezing a contract or briefing a worker |
+| [REVIEW.md](./REVIEW.md) | review is triggered by section 5 |
+| [REPORT.md](./REPORT.md) | you are writing the final report |
 
-## 0. Baseline and existing work
+## Ask, do not guess
 
-Once at the start:
+Whenever you block on a decision that is the user's — an ambiguous contract, a choice between real alternatives, plan approval — ask with the **AskUserQuestion** tool, as options they can pick, with your recommendation first and marked. A numbered list buried in prose costs them a turn of typing. Free text stays available through "Other".
+
+Do not manufacture an approval turn for routine implementation whose contract is already clear.
+
+## 0. Baseline
+
+Once, at the start:
 
 ```bash
 git rev-parse --short HEAD && git status --porcelain
 ```
 
-Record `BASE_SHA` and pre-existing dirty paths. Never overwrite unrelated work and never perform git writes unless the user explicitly asks.
+Record `BASE_SHA` and pre-existing dirty paths. Never overwrite unrelated work. Never perform git writes unless the user explicitly asks.
 
-## 0.5. Two gates before any code
+## 1. Two gates before any code
 
-Both gates are cheap and both prevent the two failures that cost the most: building the wrong thing, and fixing a bug you never actually located.
+**Alignment gate.** If the request leaves a material decision open — the rule behind the example, which data is affected, who may do it, what is out of scope — settle it **before** classifying, with the AskUserQuestion tool, one round of options with your recommendation first.
 
-**Alignment gate.** If the request leaves a material decision open — the rule behind the example, which data is affected, who may do it, what is explicitly out of scope — call the Skill tool with "grill" before classifying. Hand its `USTALENIA` / `KRYTERIA AKCEPTACJI` block into section 3 as the frozen contract and the spec. Skip the gate when the request is already unambiguous; a one-line fix does not need an interview.
+When the ambiguity is deep enough to need the full design tree rather than a round or two, stop and ask the user to run `/claudius:grill <topic>` themselves; `grill` is reserved for explicit user invocation and cannot be called from here. When the interview has already happened, its `DECISIONS`, `OUT OF SCOPE`, `ACCEPTANCE CRITERIA` and `OPEN RISKS` blocks **are** the frozen contract and the spec — `OUT OF SCOPE` included, because that is what the review's spec axis checks scope creep against. Skip the gate entirely when the request is already unambiguous.
 
-**Diagnosis gate.** For BUGFIX work whose cause is not already obvious from a stack trace or the user's own diagnosis, call the Skill tool with "diagnose" and complete at least its Phase 1 and 2 — a red-capable command, plus a minimised repro — before writing any fix. **No red-capable command, no implementation.** The minimised repro becomes the regression test and the acceptance criterion. When the cause *is* obvious, say why in one line and proceed.
+**Diagnosis gate.** For a bug whose cause is not obvious from a stack trace or the user's own diagnosis, call the Skill tool with "claudius:diagnose" and complete at least its Phase 1 and 2 — a red-capable command plus a minimised repro — before writing any fix. **No red-capable command, no implementation.** The minimised repro is the regression test and the acceptance criterion. When the cause *is* obvious, say why in one line and proceed.
 
-## 1. Classify the task
+## 2. Fast path
 
-Choose the workflow by engineering risk, not only file count.
+**A small, local change goes straight into the code.** No contract block, no worker, no reviewer, no plan approval — read what you need, make the change, run the one relevant check, report in three lines.
 
-### MICRO
-Mechanical/local change with obvious implementation, normally one file and no business/API/data contract change.
+This is the default for a change that is confined to one area, has an obvious implementation, and touches none of the triggers below.
 
-- Main conversation may implement directly.
-- Run the narrow relevant check.
-- No reviewer unless risk emerges.
+**Risk triggers — the canonical list.** Hitting any one of these means the change is not small, whatever its line count: stop, and go to section 3. The same list classifies a change as high-risk and makes review mandatory, so a new kind of risk is added here once and takes effect everywhere.
 
-### STANDARD
-Normal feature/bug/refactor in one coherent area, usually several files but one owner/context.
+- database schema, migrations, or a write that changes existing rows
+- a public API, a cross-layer contract, an emitted event, or a shared type
+- authentication, authorization, permissions, or input validation at a boundary
+- transactions, concurrency, ordering, or idempotency
+- an effect that leaves the system: payments, third-party calls, messages, stock
+- generated files, lockfiles, or anything the repository marks as not hand-edited
+- more than one layer, or roughly more than five files
+- non-trivial new business logic in a place that has no test covering it
 
-- Use at most one focused `Explore` if important locations/patterns are not already known.
-- Use one `clean-code-engineer` for the implementation.
-- Verify after integration.
-- Review if business logic is non-trivial or diff/risk justifies it.
+When one fires mid-implementation, say so in one line and pick the discipline back up — do not finish on the fast path because you already started there.
 
-### COMPLEX / HIGH-RISK
-Cross-layer contract, public API, schema/data mutation, permissions/auth, external integration, concurrency/transactions, migration, or substantial refactor.
+## 3. Classify and plan
 
-- Reconnaissance first.
-- Freeze the relevant contract and work scopes.
-- Use one implementation worker where shared context is strong; parallelize only truly independent scopes.
-- Independent final verification is required.
-- `code-reviewer` is required, on separate axes (section 7).
+Not on the fast path? Choose the workflow by engineering risk — see [CLASSIFY.md](./CLASSIFY.md) for the tiers and the parallelism rules. Freeze a contract only for details that must stay consistent across layers or workers; the format is in [CONTRACT.md](./CONTRACT.md).
 
-### PARALLEL
-Use 2-3 implementation workers only when their write scopes are provably disjoint and parallel execution materially reduces work. Prefer sequential/shared-context implementation when workers would repeatedly need the same files or decisions.
+Reuse facts already established in this conversation. Read `~/.claude/context/<repo-basename>/PROJECT.md` (verified commands, seams, hazards, enforced rules) and `CONTEXT.md` (domain glossary) when they exist — never create them in the working tree. Neither is required; without them, resolve the same facts from the repository and consider `/claudius:project-profile` afterwards.
 
-Do not create an agent just because a phase exists.
+When uncertainty remains, run one focused `Explore` for the current implementation, the best analogous pattern, reusable helpers, and contract touchpoints. Ask for paths, symbols and conclusions — never file dumps. A second `Explore` is justified only for an independent question.
 
-## 2. Reconnaissance
+When a genuinely new or contested domain term gets settled, call the Skill tool with "claudius:domain-model".
 
-Reuse facts already established in the current conversation or project instructions.
+## 4. Implement and verify
 
-Read the private per-project files under `~/.claude/context/<repo-basename>/` when they exist — never in the working tree, never created there:
+**Write the code in the main conversation** for ordinary work. You already hold the context, and delegating only to read the whole diff back at integration buys nothing.
 
-- `PROJECT.md` — verified commands, real seams, recurring hazards and the rules this repository enforces. Use its commands verbatim instead of guessing at a test or lint invocation.
-- `CONTEXT.md` — the domain glossary, so contract, code and test names use the project's own vocabulary instead of inventing synonyms.
+Send a `clean-code-engineer` when the work is genuinely large, when two scopes are provably disjoint and can run in parallel, or when the implementation would flood this context with detail nobody needs afterwards. Brief it per [CONTRACT.md](./CONTRACT.md); the rules for running a parallel wave are in [CLASSIFY.md](./CLASSIFY.md).
 
-Neither is required; without them, resolve the same facts from the repository and consider running `/project-profile` afterwards so the next run does not repeat the work. When reconnaissance or implementation settles a genuinely new or contested domain term, call the Skill tool with "domain-model" to record it.
+Then verify the combined result:
 
-When uncertainty remains, run one `Explore` with a focused multi-part question covering the relevant subset of:
+- one or two quiet targeted commands: run them here;
+- verbose, numerous or slow commands, or where independent confirmation matters: send `test-runner`;
+- high-risk work requires independent verification unless the environment prevents it.
 
-- current implementation and request/data flow,
-- best analogous implementation,
-- reusable helpers/services/types,
-- contract touchpoints and contention files,
-- concrete bug path for BUGFIX work.
+Prefer targeted typecheck, lint and focused tests first; run a full build or suite only when it materially validates the change. On failure, fix within the original scope, re-run only the affected checks, and allow about two repair rounds before reporting the real blocker instead of cycling.
 
-A second Explore is justified only for an independent domain/question. Ask for paths, symbols, conclusions and unknowns — never file dumps.
+**Never hide a failure** through ignored diagnostics, unsafe casts, disabled lint rules, deleted tests, or quietly reduced acceptance criteria.
 
-The reconnaissance result should produce `START FILES` for implementation so the worker does not rediscover the repository from zero.
+## 5. Review
 
-## 3. Contract, acceptance criteria and plan
+Send a `code-reviewer` whenever any risk trigger from section 2 was hit, and additionally for a sizeable refactor or verification that left real uncertainty. For ordinary work, review when the logic is non-trivial and skip it for small, well-covered changes.
 
-Freeze only details that must stay consistent between layers/workers:
+The axes, what to give each reviewer and how to handle findings: [REVIEW.md](./REVIEW.md).
 
-```text
-CONTRACT
-- DTO/types: <exact names/shapes or n/a>
-- API/events: <method/path/payload/events or n/a>
-- permissions/i18n: <keys or n/a>
-- data/schema: <models/fields/relations or n/a>
-- invariants: <business rules that implementations must share>
+## 6. Final gate and report
 
-ACCEPTANCE
-- <observable behavior 1>
-- <observable behavior 2>
+Before reporting success, confirm the behavior is complete rather than scaffolded, the combined diff matches the frozen contract, no unrelated work was overwritten, the checks have real results, material findings are resolved or reported, and manual steps are listed.
 
-WORK
-P1 <goal>
-   WRITE SCOPE: <paths>
-   START FILES: <paths/symbols>
-   VERIFY: <targeted checks>
-P2 ...
-```
-
-Ask the user to approve the plan before code only when a material decision is being introduced that is not already explicit in the request, especially public API/schema/auth/permission behavior, destructive migration/data behavior, or a genuinely ambiguous architectural choice. Do not create an approval turn for routine implementation whose contract is already clear.
-
-Contention/shared files should normally be integrated by the orchestrator rather than owned concurrently by multiple workers.
-
-## 4. Implement
-
-Send each `clean-code-engineer` enough context to succeed without broad rediscovery:
-
-```text
-TASK: <one measurable outcome>
-WRITE SCOPE: <exact paths>
-START FILES: <best entry points from recon>
-CONTRACT: <only relevant frozen items>
-ACCEPTANCE: <relevant observable criteria>
-PATTERN / REUSE: <known analogous paths/helpers>
-DO NOT: <task-specific hazards only>
-VERIFY SUGGESTION: <narrow check(s)>
-```
-
-Do not force an arbitrary low tool-call budget. The worker should search further when needed for correctness, but the prompt should make repeated broad reconnaissance unnecessary.
-
-For parallel work:
-- scopes must be disjoint,
-- shared contract must already be frozen,
-- keep parallel workers to 2-3,
-- do not edit a worker's files while it is active,
-- integrate `HANDOFF`/shared files after the wave.
-
-## 5. Integration
-
-After workers finish:
-
-1. Inspect their `ASSUMPTIONS`, `PUBLIC CONTRACT`, `HANDOFF`, verification and risks.
-2. Reconcile every assumption against the task/contract; do not silently change another layer to match an accidental worker deviation.
-3. Apply shared/contention-file changes once.
-4. Inspect the combined diff against `BASE_SHA` before final checks.
-5. Check for duplicated helpers/contracts created independently by parallel workers.
-
-If a worker stopped before completing a normal implementation, prefer continuing the same agent/context once. The `SubagentStop` guard may already request one automatic continuation. If the same worker repeatedly cannot complete, take over or re-scope instead of repeatedly spawning fresh agents.
-
-## 6. Verification
-
-Use two levels:
-
-### Worker-level confidence
-The implementation worker may run cheap targeted checks while coding. Treat these as useful evidence, not final integration proof.
-
-### Final verification
-After integration, verify the combined result.
-
-- For 1-2 quiet, targeted commands, main may run them directly.
-- Use `test-runner` when commands are verbose, numerous, slow, or you want independent verification/context isolation.
-- HIGH-RISK work requires independent final verification unless the environment prevents it.
-- Prefer authoritative targeted typecheck/lint/tests first; use full build/integration suite only when it materially validates the change.
-
-On implementation-caused failure:
-1. Send the concise failure evidence to the same owning `clean-code-engineer` when its context is useful.
-2. Preserve original scope/contract and ask for the smallest correction.
-3. Re-run only affected checks first, then the necessary final check.
-4. Normally allow up to 2 repair rounds; after that report the real blocker rather than cycling.
-
-Never hide a failure through ignored diagnostics, unsafe casts, disabled lint rules, deleted tests, or reduced acceptance criteria.
-
-## 7. Independent review
-
-Review when any of these apply:
-
-- HIGH-RISK classification,
-- public/cross-layer contract change,
-- auth/permissions/validation/security boundary,
-- schema/query/transaction/concurrency/data-integrity behavior,
-- external integration,
-- sizeable refactor or non-trivial new business logic,
-- verification leaves meaningful uncertainty.
-
-For ordinary STANDARD work, use judgment: review is valuable when logic is non-trivial; it can be skipped for small, well-covered changes with obvious behavior.
-
-### Axes
-
-`code-reviewer` reviews one explicit axis at a time, because a change can pass one and fail another: code that follows every convention while implementing the wrong thing passes **standards** and fails **spec**; code that does exactly what the ticket asked while breaking the repository's patterns does the reverse. Merging the axes lets one mask the other.
-
-- **STANDARD work** — one `code-reviewer` with no `AXIS`, which reports all three in separate blocks.
-- **HIGH-RISK work** — two or three `code-reviewer` instances **in parallel, in a single message**, one per axis, so neither contaminates the other's context. `AXIS: correctness` and `AXIS: spec` are the pair that always earns its cost; add `AXIS: standards` for sizeable refactors and new modules.
-
-Give every reviewer:
-- original task and acceptance criteria (the `/grill` block when there was one),
-- frozen contract,
-- `git diff <BASE_SHA> -- <relevant paths>`,
-- relevant verification results.
-
-Give the `spec` reviewer the spec and nothing that argues for the implementation; if there is no spec it must report `NO SPEC` rather than reconstruct one from the diff.
-
-### Handling findings
-
-Aggregate the blocks under their axis headings. **Do not merge or rerank across axes** and do not pick a single worst finding overall — that reranking is what the separation prevents.
-
-For each HIGH finding, verify its evidence against the code before fixing. MEDIUM findings are fixed when credible and within task scope. A `spec` scope-creep finding is fixed by *removing* the extra behavior, not by justifying it. Advisory ideas belong in follow-ups, not automatic scope growth.
-
-Beyond the axes above, do not spawn reviewer swarms.
-
-After review fixes, rerun affected verification once.
-
-## 8. Final quality gate
-
-Before reporting success, confirm:
-
-- requested behavior is complete, not merely scaffolded,
-- combined diff matches the frozen contract/acceptance criteria,
-- no unrelated pre-existing change was overwritten,
-- authoritative checks have real results,
-- material review findings are resolved or explicitly reported,
-- migration/env/deploy/manual steps are listed,
-- the final report is derived from actual git output, not from recollection.
-
-## 9. Final report
-
-First, ground the report in facts. Run once:
+Ground the report in git, not in memory:
 
 ```bash
 git --no-pager diff --numstat <BASE_SHA> && git --no-pager diff --name-status <BASE_SHA> && git status --porcelain
 ```
 
-`--numstat` gives full untruncated paths and exact `+a/-b` counts; `--name-status` gives the add/modify/delete/rename marker. Do not use plain `--stat` here — it abbreviates long paths to `.../name.ts`, which destroys the clickable reference.
+Worker reports supply the *why*; git supplies the *what*. If they disagree, git wins and the discrepancy is a risk. Format: [REPORT.md](./REPORT.md).
 
-Build `CHANGED` from that output, never from memory of what the workers said they did. Worker `CHANGED` blocks supply the *why*; git supplies the *what*. If the two disagree, git wins and the discrepancy goes under `RISKS`.
-
-Then report **as markdown, not inside a code fence** — fenced text renders as inert monospace, while plain markdown keeps `path:line` references clickable in the terminal.
-
-### Format
-
-**What changed** — one bullet per file, grouped by area when there are many. Mark each file `new` / `mod` / `del` / `ren`, give its `+a/-b` line delta from `--numstat`, and point at the key symbol with `path:line`. Say what the file now does differently, not that it was edited.
-
-> **<area>**
-> - `mod` `<path>:<line>` (+38/-6) — `<symbol>()` now rejects <case> instead of <old behavior>.
-> - `new` `<path>` (+21/-0) — <what this file is for>.
-
-Close with a one-line `TOTAL: <n> files, +<a>/-<b>`.
-
-**Behavior** — one or two sentences: what a user could not do before and can do now, or what was broken and is now correct. If the change is invisible to users (refactor, types), say so plainly.
-
-**Verification** — every command actually run, each with `PASS` / `FAIL` / `BLOCKED` and the reason for anything not green. Never list a command you did not run.
-
-**Review** — one line per axis run (`correctness`, `standards`, `spec`): `OK`, `findings fixed — <count>`, or the unresolved findings themselves. Axes not run: `pominięty — <powód>`.
-
-**Manual steps** — migrations, env vars, deploy actions, data backfills. `brak` if none.
-
-**Risks / follow-ups** — material items only. `brak` if none.
-
-**Commit suggestion** — `type(scope): message` per the repository's convention. State plainly that nothing has been committed.
-
-### Scale the report to the change
-
-For MICRO work, drop everything except the file bullets, verification and the commit suggestion. A three-line fix does not need eight headings.
-
-For work with more than roughly fifteen changed files, group bullets by area and list individual files only where a reviewer needs to look; summarize the rest as `<n> further files — <what they have in common>`.
-
-### Do not
-
-Do not pad the report with files you did not touch, restate the task description back at the user, or narrate the process (which agents ran, what was searched). The user wants the resulting change, not the transcript.
-
-Do not commit, push, create branches/PRs, run migrations, or make destructive repository changes without explicit user instruction.
+Do not commit, push, create branches or PRs, run migrations, or make destructive repository changes without explicit user instruction.
