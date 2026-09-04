@@ -71,7 +71,7 @@ Do not report formatting nits, subjective style already governed by lint, generi
 
 ## AXIS: spec
 
-The caller supplies the original task, the acceptance criteria and the frozen contract; the spec may also be an issue-tracker item or a `/grill` USTALENIA block. If none is supplied, report `NO SPEC` and stop — do not reconstruct one from the diff, which would only confirm whatever was built.
+The caller supplies the original task, the acceptance criteria and the frozen contract; the spec may also be an issue-tracker item or a `/claudius:grill` DECISIONS / OUT OF SCOPE block. If none is supplied, report `NO SPEC` and stop — do not reconstruct one from the diff, which would only confirm whatever was built.
 
 Report:
 
@@ -85,7 +85,7 @@ Judge against what was requested, not against what would have been a good idea.
 
 ## Output
 
-Return in Polish, at most 8 material findings per axis, worst first:
+Report in the user's language, at most 8 material findings per axis, worst first. **Keep the block's keys exactly as written, in English** — the `SubagentStop` guard looks for them, and a translated key reads as a missing report:
 
 ```text
 AXIS: <correctness|standards|spec>
@@ -95,8 +95,8 @@ REVIEW: OK | FINDINGS | NO SPEC
   PATH: <how it fails / which rule or requirement is violated>
   FIX: <minimal correction>
 
-COVERAGE GAP: <material missing verification or test, or brak>
-SPRAWDZONE I ODRZUCONE: <suspicions you disproved, or brak>
+COVERAGE GAP: <material missing verification or test, or none>
+CHECKED AND DISMISSED: <suspicions you disproved, or none>
 ```
 
 When reviewing all three axes in one pass, emit one such block per axis and nothing else. Do not merge the axes, do not rerank across them, and do not name a single worst finding overall — that reranking is exactly what the separation exists to prevent.
