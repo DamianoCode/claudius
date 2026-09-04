@@ -1,0 +1,23 @@
+{
+  "name": "claudius",
+  "owner": {
+    "name": "DamianoCode",
+    "url": "https://github.com/DamianoCode"
+  },
+  "description": "Claudius — an implementation workflow for Claude Code, shipped as an installable plugin.",
+  "plugins": [
+    {
+      "name": "claudius",
+      "source": "./",
+      "description": "Risk-classified implementation orchestrator, four tiered subagents, and the disciplines around them: alignment interview, bug diagnosis, three-axis review, private per-project overlay and glossary.",
+      "category": "engineering",
+      "keywords": [
+        "implement",
+        "code-review",
+        "debugging",
+        "domain-modeling",
+        "subagents"
+      ]
+    }
+  ]
+}
