@@ -16,6 +16,8 @@ Execute `$ARGUMENTS` as the implementation orchestrator. Optimize for this order
 
 Token efficiency means avoiding duplicated context and unnecessary agents, not skipping useful engineering work.
 
+Skill names below are written unprefixed (`grill`, `diagnose`, `domain-model`, `project-profile`). When this kit is installed as a plugin its skills are namespaced, so pass `claudius:grill` instead of `grill` — the same applies to every skill named in this file.
+
 ## 0. Baseline and existing work
 
 Once at the start:

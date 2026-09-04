@@ -82,6 +82,6 @@ OTWARTE RYZYKA
 - <co nadal nie jest pewne i co z tym zrobimy>
 ```
 
-If new domain terms were settled or renamed during the interview, call the Skill tool with "domain-model" to record them.
+If new domain terms were settled or renamed during the interview, call the Skill tool with "domain-model" — or `claudius:domain-model` when this kit is installed as a plugin — to record them.
 
 **Do not start implementing until the user confirms the shared understanding.** Hand the block above to `/implement` as the task description.

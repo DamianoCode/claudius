@@ -39,7 +39,7 @@ const overlay = join(dir, 'PROJECT.md');
 
 if (!existsSync(overlay)) {
   console.log(
-    `[kontekst] Brak nakładki dla "${repo}". Uruchom /project-profile, żeby skille nie musiały ustalać komend i szwów od zera przy każdym zadaniu.`,
+    `[kontekst] Brak nakładki dla "${repo}". Uruchom /project-profile (albo /claudius:project-profile, gdy zestaw jest zainstalowany jako wtyczka), żeby skille nie musiały ustalać komend i szwów od zera przy każdym zadaniu.`,
   );
   quit();
 }
@@ -90,5 +90,5 @@ const rest = newer.length > 3 ? ` (+${newer.length - 3})` : '';
 
 console.log(
   `[kontekst] Nakładka ~/.claude/context/${repo}/PROJECT.md ma ${days} dni i jest starsza niż: ${shown}${rest}. ` +
-    `Jeśli zmienił się stack, komendy albo reguły — odśwież ją przez /project-profile. Sam plik może być nadal poprawny.`,
+    `Jeśli zmienił się stack, komendy albo reguły — odśwież ją przez /project-profile (albo /claudius:project-profile). Sam plik może być nadal poprawny.`,
 );
