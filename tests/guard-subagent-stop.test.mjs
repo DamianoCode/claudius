@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import {
   runHook,
   runHookRaw,
+  stopContinuation,
   withTmpDir,
   writeTranscript,
   editToolLine,
@@ -34,96 +35,104 @@ test('exits 0 and prints nothing for empty stdin', () => {
   assert.equal(result.stderr, '');
 });
 
-test('exits 0 for a well-formed event whose hook_event_name it does not own', () => {
+test('lets the agent stop for a well-formed event whose hook_event_name it does not own', () => {
   const result = runHook(HOOK, {
     hook_event_name: 'PreToolUse',
     agent_type: 'test-runner',
     last_assistant_message: 'no RESULT here',
   });
-  assert.equal(result.status, 0);
-  assert.equal(result.stderr, '');
+  assert.equal(stopContinuation(result), '');
 });
 
 // --- stop_hook_active: never turn validation into a loop ---
 
-test('exits 0 when stop_hook_active is true regardless of the rest of the payload', () => {
+test('lets the agent stop when stop_hook_active is true regardless of the rest of the payload', () => {
   const result = runHook(HOOK, {
     hook_event_name: 'SubagentStop',
     stop_hook_active: true,
     agent_type: 'test-runner',
     last_assistant_message: 'nothing useful',
   });
-  assert.equal(result.status, 0);
-  assert.equal(result.stderr, '');
+  assert.equal(stopContinuation(result), '');
 });
 
-// --- test-runner contract ---
+// --- the continuation protocol ---
 
-test('blocks a test-runner whose final message lacks RESULT:', () => {
+test('asks for a continuation through additionalContext, not through an exit-2 error', () => {
   const result = runHook(HOOK, {
     hook_event_name: 'SubagentStop',
     agent_type: 'test-runner',
     last_assistant_message: 'Ran the tests, looked fine.',
   });
-  assert.equal(result.status, 2);
-  assert.match(result.stderr, /RESULT/);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, '');
+  assert.deepEqual(Object.keys(JSON.parse(result.stdout).hookSpecificOutput).sort(), [
+    'additionalContext',
+    'hookEventName',
+  ]);
 });
 
-test('allows a test-runner whose final message has RESULT:', () => {
+// --- test-runner contract ---
+
+test('sends back a test-runner whose final message lacks RESULT:', () => {
+  const result = runHook(HOOK, {
+    hook_event_name: 'SubagentStop',
+    agent_type: 'test-runner',
+    last_assistant_message: 'Ran the tests, looked fine.',
+  });
+  assert.match(stopContinuation(result), /RESULT/);
+});
+
+test('lets a test-runner whose final message has RESULT: stop', () => {
   const result = runHook(HOOK, {
     hook_event_name: 'SubagentStop',
     agent_type: 'test-runner',
     last_assistant_message: 'RESULT: PASS\nCHECKS: npm test\nFAILURES: none\nEVIDENCE: ok\nNEXT: none',
   });
-  assert.equal(result.status, 0);
-  assert.equal(result.stderr, '');
+  assert.equal(stopContinuation(result), '');
 });
 
 // --- code-reviewer contract ---
 
-test('blocks a code-reviewer whose final message lacks REVIEW:', () => {
+test('sends back a code-reviewer whose final message lacks REVIEW:', () => {
   const result = runHook(HOOK, {
     hook_event_name: 'SubagentStop',
     agent_type: 'code-reviewer',
     last_assistant_message: 'Looks good to me.',
   });
-  assert.equal(result.status, 2);
-  assert.match(result.stderr, /REVIEW/);
+  assert.match(stopContinuation(result), /REVIEW/);
 });
 
-test('allows a code-reviewer whose final message has REVIEW:', () => {
+test('lets a code-reviewer whose final message has REVIEW: stop', () => {
   const result = runHook(HOOK, {
     hook_event_name: 'SubagentStop',
     agent_type: 'code-reviewer',
     last_assistant_message: 'REVIEW: OK\nnothing else to add',
   });
-  assert.equal(result.status, 0);
-  assert.equal(result.stderr, '');
+  assert.equal(stopContinuation(result), '');
 });
 
 // --- clean-code-engineer contract ---
 
-test('allows a clean-code-engineer that reports NO_CHANGE: with no edits at all', () => {
+test('lets a clean-code-engineer that reports NO_CHANGE: with no edits at all stop', () => {
   const result = runHook(HOOK, {
     hook_event_name: 'SubagentStop',
     agent_type: 'clean-code-engineer',
     last_assistant_message: 'NO_CHANGE: requested state already exists.',
   });
-  assert.equal(result.status, 0);
-  assert.equal(result.stderr, '');
+  assert.equal(stopContinuation(result), '');
 });
 
-test('allows a clean-code-engineer that reports BLOCKED: with no edits at all', () => {
+test('lets a clean-code-engineer that reports BLOCKED: with no edits at all stop', () => {
   const result = runHook(HOOK, {
     hook_event_name: 'SubagentStop',
     agent_type: 'clean-code-engineer',
     last_assistant_message: 'BLOCKED: missing prerequisite, cannot proceed.',
   });
-  assert.equal(result.status, 0);
-  assert.equal(result.stderr, '');
+  assert.equal(stopContinuation(result), '');
 });
 
-test('blocks a clean-code-engineer whose transcript records no edit tool', () => {
+test('sends back a clean-code-engineer whose transcript records no edit tool', () => {
   withTmpDir(PREFIX, (dir) => {
     const transcript = writeTranscript(dir, [assistantTextLine('I looked around but changed nothing.')]);
     const result = runHook(HOOK, {
@@ -132,12 +141,11 @@ test('blocks a clean-code-engineer whose transcript records no edit tool', () =>
       agent_transcript_path: transcript,
       last_assistant_message: 'I looked around but changed nothing.',
     });
-    assert.equal(result.status, 2);
-    assert.match(result.stderr, /no Edit\/Write was recorded/);
+    assert.match(stopContinuation(result), /no Edit\/Write was recorded/);
   });
 });
 
-test('allows a clean-code-engineer that edited and returned the full completion report', () => {
+test('lets a clean-code-engineer that edited and returned the full completion report stop', () => {
   withTmpDir(PREFIX, (dir) => {
     const transcript = writeTranscript(dir, [
       editToolLine(),
@@ -150,12 +158,11 @@ test('allows a clean-code-engineer that edited and returned the full completion 
       last_assistant_message:
         'SCOPE: src/x.js\nASSUMPTIONS: none\n\nCHANGED:\n- src/x.js — fixed bug\n\nTESTS: none\nPUBLIC CONTRACT: none\nHANDOFF: none\nVERIFY:\nRISKS / FOLLOW-UPS: none',
     });
-    assert.equal(result.status, 0);
-    assert.equal(result.stderr, '');
+    assert.equal(stopContinuation(result), '');
   });
 });
 
-test('blocks a clean-code-engineer that edited but did not return the completion report', () => {
+test('sends back a clean-code-engineer that edited but did not return the completion report', () => {
   withTmpDir(PREFIX, (dir) => {
     const transcript = writeTranscript(dir, [editToolLine()]);
     const result = runHook(HOOK, {
@@ -164,8 +171,7 @@ test('blocks a clean-code-engineer that edited but did not return the completion
       agent_transcript_path: transcript,
       last_assistant_message: 'Done, fixed it.',
     });
-    assert.equal(result.status, 2);
-    assert.match(result.stderr, /completion report/);
+    assert.match(stopContinuation(result), /completion report/);
   });
 });
 
@@ -182,10 +188,8 @@ test('resolves a namespaced agent identity the same way as the bare name', () =>
     agent_type: 'test-runner',
     last_assistant_message: 'no result marker',
   });
-  assert.equal(namespaced.status, 2);
-  assert.equal(bare.status, 2);
-  assert.match(namespaced.stderr, /RESULT/);
-  assert.match(bare.stderr, /RESULT/);
+  assert.match(stopContinuation(namespaced), /RESULT/);
+  assert.match(stopContinuation(bare), /RESULT/);
 });
 
 test('polices nobody when the event carries no agent identity, rather than guessing from the transcript', () => {
@@ -203,8 +207,7 @@ test('polices nobody when the event carries no agent identity, rather than guess
       agent_transcript_path: transcript,
       last_assistant_message: 'REVIEW: OK',
     });
-    assert.equal(result.status, 0);
-    assert.equal(result.stderr, '');
+    assert.equal(stopContinuation(result), '');
   });
 });
 
@@ -221,8 +224,7 @@ test('resolves the final assistant message from the transcript tail when last_as
       agent_type: 'test-runner',
       agent_transcript_path: transcript,
     });
-    assert.equal(result.status, 0);
-    assert.equal(result.stderr, '');
+    assert.equal(stopContinuation(result), '');
   });
 });
 
@@ -242,7 +244,7 @@ test('stays permissive when the transcript is past the scan limit and shows no e
       last_assistant_message: 'SCOPE: hooks/\nCHANGED:\n- hooks/x.mjs — rewritten',
     });
 
-    assert.equal(result.status, 0, `expected permissive, stderr: ${result.stderr}`);
+    assert.equal(stopContinuation(result), '', 'expected permissive');
   });
 });
 
@@ -253,7 +255,7 @@ test('stays permissive when the event carries no transcript path', () => {
     last_assistant_message: 'SCOPE: hooks/\nCHANGED:\n- hooks/x.mjs — rewritten',
   });
 
-  assert.equal(result.status, 0, `expected permissive, stderr: ${result.stderr}`);
+  assert.equal(stopContinuation(result), '', 'expected permissive');
 });
 
 test('stays permissive when the transcript file cannot be read', () => {
@@ -265,7 +267,7 @@ test('stays permissive when the transcript file cannot be read', () => {
       last_assistant_message: 'SCOPE: hooks/\nCHANGED:\n- hooks/x.mjs — rewritten',
     });
 
-    assert.equal(result.status, 0, `expected permissive, stderr: ${result.stderr}`);
+    assert.equal(stopContinuation(result), '', 'expected permissive');
   });
 });
 
@@ -283,7 +285,6 @@ test('still demands a report from an engineer that edited files and then reporte
       last_assistant_message: 'BLOCKED: the API contract is missing.',
     });
 
-    assert.equal(result.status, 2);
-    assert.match(result.stderr, /completion report/);
+    assert.match(stopContinuation(result), /completion report/);
   });
 });

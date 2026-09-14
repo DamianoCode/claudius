@@ -4,7 +4,6 @@ description: Production implementation worker for features, bug fixes and refact
 tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell
 model: sonnet
 effort: medium
-permissionMode: acceptEdits
 color: green
 ---
 

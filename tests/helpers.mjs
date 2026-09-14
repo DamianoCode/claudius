@@ -50,6 +50,17 @@ export function runHook(name, input, opts = {}) {
   return runHookRaw(name, JSON.stringify(input), opts);
 }
 
+// What the SubagentStop guard asked of the agent: the feedback it sent through
+// additionalContext, or '' when it let the agent stop. The guard never fails the hook
+// itself, so any exit status other than 0 is an error here.
+export function stopContinuation(result) {
+  if (result.status !== 0) throw new Error(`the guard must exit 0, got ${result.status}: ${result.stderr}`);
+  if (result.stdout === '') return '';
+  const output = JSON.parse(result.stdout).hookSpecificOutput;
+  if (output?.hookEventName !== 'SubagentStop') throw new Error(`unexpected guard output: ${result.stdout}`);
+  return output.additionalContext;
+}
+
 export function makeTmpDir(prefix) {
   return mkdtempSync(join(tmpdir(), prefix));
 }

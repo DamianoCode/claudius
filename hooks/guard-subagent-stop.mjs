@@ -14,7 +14,6 @@
 import { readTail, scanFile, YES, NO } from './lib/transcript.mjs';
 
 const EXIT_OK = 0;
-const EXIT_BLOCK = 2;
 
 const TAIL_BYTES = 256 * 1024;
 const SCAN_CHUNK_BYTES = 64 * 1024;
@@ -66,9 +65,14 @@ async function readInput() {
   }
 }
 
+// Keeps the worker running with `reason` as its next instruction. additionalContext
+// (Claude Code 2.1.163+) does that without the turn being labelled a hook error, which
+// is how an exit-2 block reaches the user.
 function block(reason) {
-  process.stderr.write(`${reason}\n`);
-  process.exit(EXIT_BLOCK);
+  process.stdout.write(
+    JSON.stringify({ hookSpecificOutput: { hookEventName: 'SubagentStop', additionalContext: reason } }),
+  );
+  process.exit(EXIT_OK);
 }
 
 function resolveAgent(input) {

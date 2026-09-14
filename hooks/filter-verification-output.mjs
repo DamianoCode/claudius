@@ -20,7 +20,12 @@ const MAX_KEPT_LINES = 280;
 
 // Output that reads as a test/lint/build runner, in any ecosystem.
 const RUNNER_OUTPUT =
-  /(?:^|\n)\s*(?:Test Files\s+\d|Tests?:\s+\d|Test Suites:|Snapshots:|collected \d+ items|=+ .*\b(?:passed|failed|skipped)\b.*=+|test result: (?:ok|FAILED)|ok\s+\S+\s+[\d.]+s|PASS\s|FAIL\s|✓ |✔ |√ |\d+ passed\b|\d+ problems? \(|Successfully ran target|NX\s{2,}|Tasks:\s+\d+ successful|Compiled successfully|✓ Compiled|Route \(app\)|webpack \d|BUILD SUCCESSFUL|BUILD SUCCESS|\[INFO\] Tests run:|• (?:building|packaging|signing)|Done in \d)/i;
+  /(?:^|\n)\s*(?:Test Files\s+\d|Tests?:\s+\d|Test Suites:|Snapshots:|collected \d+ items|=+ .*\b(?:passed|failed|skipped)\b.*=+|test result: (?:ok|FAILED)|ok\s+\S+\s+[\d.]+s|PASS\s|FAIL\s|\d+ passed\b|\d+ problems? \(|Successfully ran target|NX\s{2,}|Tasks:\s+\d+ successful|Compiled successfully|✓ Compiled|Route \(app\)|webpack \d|BUILD SUCCESSFUL|BUILD SUCCESS|\[INFO\] Tests run:|• (?:building|packaging|signing)|Done in \d)/i;
+
+// A check mark reads as a runner only in a column of them. A single "✔ done" closing a
+// file listing, or a validator's "✔ Validation passed", is not a test run.
+const CHECK_LINE = /(?:^|\n)\s*(?:✓|✔|√) /g;
+const MIN_CHECK_LINES = 3;
 
 // Failure markers. Their presence disables filtering entirely. A red run can still
 // reach this hook with a zero exit status — `npm test | tee log`, `... || true`, a
@@ -81,7 +86,7 @@ async function main() {
   // Never filter a failure — the evidence is the whole point of running the command.
   if (looksFailed(response, combined)) passThrough();
 
-  const isVerification = RUNNER_OUTPUT.test(combined) || isVerificationCommand(input.tool_input.command);
+  const isVerification = looksLikeRunner(combined) || isVerificationCommand(input.tool_input.command);
   if (!isVerification) passThrough();
 
   const selected = selectLines(lines);
@@ -129,6 +134,16 @@ function applies(input) {
 
 function textOf(value) {
   return typeof value === 'string' ? value : '';
+}
+
+function looksLikeRunner(combined) {
+  if (RUNNER_OUTPUT.test(combined)) return true;
+  let checks = 0;
+  for (const _ of combined.matchAll(CHECK_LINE)) {
+    checks += 1;
+    if (checks >= MIN_CHECK_LINES) return true;
+  }
+  return false;
 }
 
 function looksFailed(response, combined) {
