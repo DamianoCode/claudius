@@ -48,7 +48,7 @@ The model tiering is deliberate: reconnaissance and verification are cheap and m
 
 - **`SessionStart`** — tells you when a project overlay has gone stale relative to the manifests, rules and schemas it was built from. Silent when fresh, and silent when there is no overlay at all.
 - **`PostToolUse`** — collapses long successful test/lint/build output to the lines that carry signal, deciding from the shape of the output rather than a list of command names. Anything that looks like a failure passes through whole.
-- **`SubagentStop`** — refuses a worker that stopped without editing anything or without its completion report, and asks it to continue in the same context once. Never loops.
+- **`SubagentStop`** — refuses a worker that stopped without editing anything or without its completion report, and asks it to continue in the same context once. Never loops. The request arrives as feedback rather than a hook error, which needs Claude Code 2.1.163 or later.
 
 ## Three ideas worth stealing even if you take nothing else
 

@@ -210,6 +210,29 @@ test('returns {} for a long grep whose arguments merely contain the word "test"'
   assert.equal(result.stdout, '{}');
 });
 
+test('returns {} for a long listing that merely ends on a single check mark', () => {
+  // Regression: one "✔ " anywhere once made any long output count as a runner summary, so
+  // a file dump that happened to end on a validator's "✔ Validation passed" lost 130 lines.
+  const lines = [...benignFillerLines(250), '✔ Validation passed'];
+  const result = runHook(HOOK, bashInput({ command: 'cat manifest.json && claude plugin validate .', stdout: lines.join('\n') }));
+  assert.equal(result.stdout, '{}');
+});
+
+test('returns {} for long output with only two check-mark lines', () => {
+  // The column starts at three: two marks are still a status line or two, not a test run.
+  const lines = [...benignFillerLines(250), '✔ config loaded', '✔ cache warmed'];
+  const result = runHook(HOOK, bashInput({ command: 'node scripts/setup.mjs', stdout: lines.join('\n') }));
+  assert.equal(result.stdout, '{}');
+});
+
+test('filters a column of check marks from a runner the command does not reveal', () => {
+  // node --test behind a script name the fast path does not know: only the output shape
+  // says this is a test run.
+  const lines = [...benignFillerLines(200), '✔ parses the header (1.2ms)', '✔ rejects a bad token (0.4ms)', '✔ keeps order (0.3ms)'];
+  const result = runHook(HOOK, bashInput({ command: 'node scripts/check-all.mjs', stdout: lines.join('\n') }));
+  assertFiltered(result, lines.length);
+});
+
 test('returns {} for a long build-directory command that never invokes a task runner', () => {
   const lines = benignFillerLines(300);
   const result = runHook(HOOK, bashInput({ command: 'cd build && cmake --build .', stdout: lines.join('\n') }));
