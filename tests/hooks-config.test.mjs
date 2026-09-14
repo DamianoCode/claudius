@@ -11,7 +11,15 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { REPO_ROOT, runHook, makeTmpDir, removeDir, writeTranscript, editToolLine } from './helpers.mjs';
+import {
+  REPO_ROOT,
+  runHook,
+  stopContinuation,
+  makeTmpDir,
+  removeDir,
+  writeTranscript,
+  editToolLine,
+} from './helpers.mjs';
 
 const config = JSON.parse(readFileSync(join(REPO_ROOT, 'hooks', 'hooks.json'), 'utf8'));
 
@@ -87,9 +95,22 @@ test('every agent the manifest lists exists on disk', () => {
 
 // --- the SubagentStop matcher and the guarded agents agree ---
 
+// A plugin agent reports a scoped agent_type such as "claudius:test-runner". Since Claude
+// Code 2.1.195 a matcher made only of letters, digits, "_", "-", spaces, "," and "|" is a
+// list of exact names, and a list of bare names never matches a scoped one — the guard
+// then silently never runs. Any other character makes it an unanchored JavaScript regex.
+const EXACT_MATCH_ONLY = /^[A-Za-z0-9_\- ,|]*$/;
+const SCOPED_MATCHER = /^\^claudius:\(([^()]+)\)\$$/;
+
+function subagentStopMatcher() {
+  return config.hooks.SubagentStop[0].matcher;
+}
+
 test('the SubagentStop matcher lists exactly the agents whose completion is enforced', () => {
-  const matcher = config.hooks.SubagentStop[0].matcher;
-  const listed = matcher.split('|').map((name) => name.trim());
+  const matcher = subagentStopMatcher();
+  const scoped = matcher.match(SCOPED_MATCHER);
+  assert.ok(scoped, `expected the form ^claudius:(a|b|c)$, got ${matcher}`);
+  const listed = scoped[1].split('|').map((name) => name.trim());
 
   assert.deepEqual(listed.slice().sort(), Object.keys(GUARDED).sort());
 
@@ -99,6 +120,20 @@ test('the SubagentStop matcher lists exactly the agents whose completion is enfo
       `the matcher names ${name}, but agents/${name}.md does not exist`,
     );
   }
+});
+
+test('the SubagentStop matcher fires for exactly the plugin-scoped names Claude Code reports', () => {
+  const source = subagentStopMatcher();
+  assert.doesNotMatch(source, EXACT_MATCH_ONLY, 'Claude Code would compare this matcher as exact names');
+
+  // Evaluated the way Claude Code evaluates it: RegExp.prototype.test, unanchored.
+  const matcher = new RegExp(source);
+  for (const name of Object.keys(GUARDED)) {
+    assert.ok(matcher.test(`claudius:${name}`), `does not fire for claudius:${name}`);
+    assert.ok(!matcher.test(`claudius:senior-${name}`), `also fires for claudius:senior-${name}`);
+    assert.ok(!matcher.test(`other-plugin:${name}`), `also fires for other-plugin:${name}`);
+  }
+  assert.ok(!matcher.test('claudius:Explore'), 'fires for the unguarded explorer');
 });
 
 test('every agent definition in the repository is either guarded or deliberately not', () => {
@@ -139,7 +174,7 @@ test('a report copied verbatim from the clean-code-engineer template passes the 
       agent_transcript_path: transcript,
       last_assistant_message: reportTemplate('clean-code-engineer'),
     });
-    assert.equal(result.status, 0, `guard rejected its own agent's template: ${result.stderr}`);
+    assert.equal(stopContinuation(result), '', 'guard rejected its own agent\'s template');
   } finally {
     removeDir(dir);
   }
@@ -152,6 +187,6 @@ for (const agent of ['test-runner', 'code-reviewer']) {
       agent_type: `claudius:${agent}`,
       last_assistant_message: reportTemplate(agent),
     });
-    assert.equal(result.status, 0, `guard rejected its own agent's template: ${result.stderr}`);
+    assert.equal(stopContinuation(result), '', 'guard rejected its own agent\'s template');
   });
 }
