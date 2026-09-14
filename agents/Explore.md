@@ -5,7 +5,7 @@ tools: Read, Glob, Grep, Bash, PowerShell
 disallowedTools: Write, Edit, NotebookEdit
 model: haiku
 effort: medium
-maxTurns: 25
+maxTurns: 40
 color: cyan
 ---
 
