@@ -33,8 +33,9 @@ That builds a private overlay — commands, seams, hazards, rules — outside th
 | `claudius:diagnose` | model | Six-phase bug discipline. Phase 1 is the whole skill: **no red-capable command, no hypotheses.** |
 | `claudius:domain-model` | model | Glossary and decision records — kept private, never written into the repository. |
 | `claudius:codebase-design` | model | Vocabulary for deep modules: interface, depth, seam, adapter, leverage, locality. |
+| `claudius:workspace` | model | Work in progress in a reusable worktree slot or on a branch of the main checkout — per repository, switchable. Opt-in. |
 
-The bottom three fire on their own when the task calls for them; you never type those.
+The bottom four fire on their own when the task calls for them; you never type those.
 
 `implement` keeps its reference material in separate files — [CLASSIFY](skills/implement/CLASSIFY.md), [CONTRACT](skills/implement/CONTRACT.md), [REVIEW](skills/implement/REVIEW.md), [REPORT](skills/implement/REPORT.md) — and reads one only on reaching the phase that needs it. A one-line fix never pays for the review chapter.
 
@@ -46,8 +47,10 @@ The model tiering is deliberate: reconnaissance and verification are cheap and m
 
 ### Hooks
 
-- **`SessionStart`** — tells you when a project overlay has gone stale relative to the manifests, rules and schemas it was built from. Silent when fresh, and silent when there is no overlay at all.
+- **`SessionStart`** — tells you when a project overlay has gone stale relative to the manifests, rules and schemas it was built from. Silent when fresh, and silent when there is no overlay at all. In a repository with a workspace config, also says in one line which mode it uses and how to start and finish work.
+- **`PreToolUse`** — in a repository with a workspace config, refuses edits to protected paths on shared ground — the main tree in worktrees mode, a protected branch in branches mode — and answers with the command that fixes it. Silent everywhere else, and never spawns a process, because it runs on every edit.
 - **`PostToolUse`** — collapses long successful test/lint/build output to the lines that carry signal, deciding from the shape of the output rather than a list of command names. Anything that looks like a failure passes through whole.
+- **`SessionEnd`** — in worktrees mode, frees the ending session's slots when nothing in them would be lost. Never blocks an exit.
 - **`SubagentStop`** — refuses a worker that stopped without editing anything or without its completion report, and asks it to continue in the same context once. Never loops. The request arrives as feedback rather than a hook error, which needs Claude Code 2.1.163 or later.
 
 ## Three ideas worth stealing even if you take nothing else
@@ -60,12 +63,15 @@ The model tiering is deliberate: reconnaissance and verification are cheap and m
 
 ## The private context directory
 
-Two files live per repository under `~/.claude/context/<repo-basename>/`, and **never inside the working tree** — a shared repository should not gain files that change how a whole team works:
+Up to three files live per repository under `~/.claude/context/<repo-basename>/`, and **never inside the working tree** — a shared repository should not gain files that change how a whole team works:
 
 - `PROJECT.md` — engineering mechanics: stack, verified commands, real seams, hazards, hard rules. Written by `project-profile`.
 - `CONTEXT.md` — the domain glossary. Written by `domain-model`, one confirmed term at a time.
+- `workspace.json` — how work in progress is isolated: worktree slots or branches. See `skills/workspace/SKILL.md`.
 
-Both are optional. Without them every skill still works; it just re-derives the same facts from the repository on each run.
+The folder is named after the **main** working tree, so a session inside a linked worktree reads the same files.
+
+All are optional. Without them every skill still works; it just re-derives the same facts from the repository on each run.
 
 ## Language
 
@@ -80,6 +86,34 @@ npm test
 ```
 
 No dependencies — `node --test`, driving the hooks as subprocesses the way Claude Code actually invokes them. The scanner behind the `SubagentStop` guard lives in `hooks/lib/` so it can be driven by a fake chunk source: that is what turns "it stops at the first match" into something a test can prove, rather than a stopwatch reading that any implementation would pass. A separate suite checks that `hooks.json` still points at files that exist and that the report templates in `agents/*.md` still satisfy the guard. CI runs the same command on Linux and Windows, on Node 20 and 22, for every push and pull request.
+
+## Workspace: worktrees or branches
+
+Work in progress needs its own place, and how much isolation it needs depends on how many sessions run at once. `bin/workspace.mjs` gives each repository one of two modes, switchable at any time:
+
+- **worktrees** — a small pool of long-lived worktrees beside the repository (`../<repo>-worktrees/slot-N`, folder and prefix configurable). Only the branch changes between tasks, so a warm slot is ready in seconds where a fresh `git worktree add` of a large monorepo takes minutes — and nothing is left lying around after the merge.
+- **branches** — one checkout, one work branch per task. For a single session at a time; the guard keeps edits off the base branch.
+
+```
+node bin/workspace.mjs take feat/login    # worktrees: claim a slot (last line = its path) · branches: switch
+node bin/workspace.mjs release            # refuses unpushed work
+node bin/workspace.mjs init [--dry-run]   # propose a config from the repository, then write it
+node bin/workspace.mjs mode branches      # or: mode worktrees · mode off · no argument shows the mode
+node bin/workspace.mjs                    # status, with pull requests
+node bin/workspace.mjs sweep [--yes]      # free / remove what has merged or been abandoned
+```
+
+Everything project-specific — mode, folders, base branch, protected paths and branches, what survives between tasks, which files to copy and which install steps to run when a lockfile changes — lives in the private `workspace.json`, so the repository itself gains nothing.
+
+**Opt-in, never imposed.** Without a `workspace.json` nothing changes: the hooks stay silent, the CLI refuses to act and the skill does not suggest itself, so a repository with its own worktree scripts or branch habits keeps them. `node bin/workspace.mjs init` proposes a config from the repository — base branch, where existing worktrees already live, code folders, caches, env files, the install step — with the reason for each value, and writes it only when asked (`--dry-run` to look first). `mode off` pauses a configured repository without deleting anything; `CLAUDIUS_WORKSPACE=off` switches the feature off everywhere.
+
+How the worktrees mode fits Claude Code rather than working around it:
+
+- **Sessions move in with `EnterWorktree`.** After `take`, the session enters the slot by path: working directory, shell, `CLAUDE.md` and write access follow, and so do subagents. Claude Code asks once to approve the move out of the repository. `"pool": ".claude/worktrees"` removes that prompt and allows jumping between slots, but puts slots inside the repository with paths long enough to trouble Windows tooling.
+- **Nothing a teammate pulls changes.** Slots sit outside the working tree (or, inside it, behind the repository-local `.git/info/exclude`); claims live in `.git/claudius-slots`, beyond the reach of a `git clean`.
+- **Slots cannot be swept away.** Each one carries a `git worktree lock`, which Claude Code's periodic worktree cleanup, `git worktree prune` and a plain `git worktree remove` all respect. A worktree without that lock is never treated as a slot, whatever its name.
+- **Claims follow sessions.** A claim records the Claude Code session and process. `SessionEnd` frees the ending session's slots when nothing would be lost; a crashed session's slot is reclaimed when clean and pushed, and kept as `orphaned` — resumable by taking its branch — when it is not.
+- **`claude --worktree` and subagent `isolation: "worktree"` are left alone.** A `WorktreeCreate` hook would replace that behaviour in every repository, not only the ones that opted in.
 
 ## Migrating from 0.1
 

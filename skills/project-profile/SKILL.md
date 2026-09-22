@@ -13,10 +13,10 @@ Produce `~/.claude/context/<repo-basename>/PROJECT.md`: the project-specific ove
 **Private, never in the repository.** Resolve the target once:
 
 ```bash
-git rev-parse --show-toplevel
+git rev-parse --path-format=absolute --git-common-dir
 ```
 
-Take the basename and write to `~/.claude/context/<basename>/PROJECT.md`. Confirm the path does not sit inside the working tree before writing. The repository must end the run exactly as it started — check with `git status --porcelain`.
+Take the basename of its parent directory — the main working tree, so a linked worktree resolves the same folder — and write to `~/.claude/context/<basename>/PROJECT.md`. Confirm the path does not sit inside the working tree before writing. The repository must end the run exactly as it started — check with `git status --porcelain`.
 
 **Verified facts only.** Every command in the overlay must have been run or read out of a manifest, never guessed. A command that does not work is worse than an absent one, because the next run will trust it. Where two sources disagree, record both and say which to confirm.
 

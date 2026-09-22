@@ -12,6 +12,7 @@ import {
   openSync,
   writeSync,
   closeSync,
+  realpathSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -61,8 +62,10 @@ export function stopContinuation(result) {
   return output.additionalContext;
 }
 
+// Spelled the way git reports it: a runner's temp dir can be an 8.3 short path
+// (C:\Users\RUNNER~1\…) that git would print in its long form.
 export function makeTmpDir(prefix) {
-  return mkdtempSync(join(tmpdir(), prefix));
+  return realpathSync.native(mkdtempSync(join(tmpdir(), prefix)));
 }
 
 // Runs `fn` with a throwaway directory, removed however `fn` ends.

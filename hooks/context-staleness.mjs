@@ -8,8 +8,9 @@
 
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
-import { homedir } from 'node:os';
 import { execFileSync } from 'node:child_process';
+
+import { locateRepo, overlayDir } from './lib/repo.mjs';
 
 // Files the overlay draws its facts from. Fixed list plus tracked schemas and rules —
 // cheap, because git ls-files is indexed and we stat only a few dozen paths.
@@ -37,8 +38,10 @@ const cwd = readCwd();
 const root = gitRoot(cwd);
 if (!root) quit(); // not a repository — not our business
 
-const repo = basename(root);
-const overlay = join(homedir(), '.claude', 'context', repo, 'PROJECT.md');
+// Named after the main working tree, so a linked worktree finds the same overlay.
+const main = locateRepo(root)?.main ?? root;
+const repo = basename(main);
+const overlay = join(overlayDir(main), 'PROJECT.md');
 if (!existsSync(overlay)) quit();
 
 const overlayMtime = statSync(overlay).mtimeMs;
