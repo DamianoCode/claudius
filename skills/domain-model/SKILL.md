@@ -16,10 +16,10 @@ Merely *reading* the glossary for vocabulary is not this skill — that is a one
 Resolve the location once:
 
 ```bash
-git rev-parse --show-toplevel
+git rev-parse --path-format=absolute --git-common-dir
 ```
 
-Take the **basename** of that path and use:
+Take the **basename of its parent directory** — the main working tree, the same from every linked worktree — and use:
 
 ```
 ~/.claude/context/<repo-basename>/
