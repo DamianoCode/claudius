@@ -662,3 +662,44 @@ test('init proposes release branches as the base when they carry the newest work
     assert.match(result.stderr, /release branches carry newer work/);
   });
 });
+
+// --- path spelling ----------------------------------------------------------------
+
+// Windows can hand the same folder out as an 8.3 short path (C:\Users\RUNNER~1\…); git
+// always reports the long one. Everything that compares paths must agree on a spelling.
+function shortPath(longPath) {
+  // Through the environment, so no quoting layer between Node and the shell can mangle it.
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    '(New-Object -ComObject Scripting.FileSystemObject).GetFolder($env:CLAUDIUS_LONG_PATH).ShortPath'], {
+    encoding: 'utf8', env: { ...process.env, CLAUDIUS_LONG_PATH: longPath },
+  });
+  return result.status === 0 && result.stdout.trim() ? result.stdout.trim() : longPath;
+}
+
+test('slots are recognised when the repository is reached through a short 8.3 path', { skip: process.platform !== 'win32' }, (t) => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, { size: 1 });
+    const longRoot = join(boundary, 'a-directory-name-long-enough-for-8dot3');
+    mkdirSync(longRoot);
+    const short = shortPath(longRoot);
+    if (short.toLowerCase() === longRoot.toLowerCase()) {
+      t.skip('8.3 names are disabled on this volume');
+      return;
+    }
+    // The repository lives under the long-named folder; every command reaches it by the short name.
+    const repo = join(longRoot, 'main');
+    git(w.main, 'clone', '-q', join(boundary, 'origin.git'), repo);
+    writePool(w.home, repo, { base: 'origin/main', size: 1 });
+    const viaShort = join(short, 'main');
+
+    const first = slot(w, ['take', 'feat/a'], viaShort);
+    assert.equal(first.status, 0, first.stderr);
+    assert.equal(lastLine(first.stdout), join(longRoot, 'main-worktrees', 'slot-1'), 'reported in the long form git uses');
+
+    const second = slot(w, ['take', 'feat/b'], viaShort);
+    assert.equal(second.status, 2, 'the claimed slot must be recognised as a slot, not ignored');
+    assert.match(second.stderr, /All 1 slots are claimed/);
+
+    assert.equal(slot(w, ['release', 'slot-1'], viaShort).status, 0);
+  });
+});

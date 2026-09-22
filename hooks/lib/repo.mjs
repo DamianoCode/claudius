@@ -7,13 +7,33 @@
 //
 // Kept free of child processes because the PreToolUse guard runs this on every edit.
 
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 
+// One spelling per directory, so paths from git, from Claude Code and from the user
+// compare equal. Windows hands out the same folder as C:\Users\RUNNER~1\… and as
+// C:\Users\runneradmin\…, or with a different drive-letter case; git always reports the
+// long form. A path that does not exist yet is spelled from its nearest existing parent.
+export function canonical(path) {
+  let existing = resolve(path);
+  const missing = [];
+  while (!existsSync(existing)) {
+    const parent = dirname(existing);
+    if (parent === existing) return resolve(path);
+    missing.unshift(basename(existing));
+    existing = parent;
+  }
+  try {
+    return join(realpathSync.native(existing), ...missing);
+  } catch {
+    return resolve(path);
+  }
+}
+
 // Nearest ancestor of `start` (inclusive) that contains a `.git` entry, or null.
 function findGitEntry(start) {
-  let dir = resolve(start);
+  let dir = canonical(start);
   for (;;) {
     const entry = join(dir, '.git');
     if (existsSync(entry)) return { dir, entry };
@@ -39,7 +59,7 @@ export function locateRepo(start) {
   const gitdir = isAbsolute(match[1]) ? match[1] : resolve(found.dir, match[1]);
   const commonDir = resolve(gitdir, '..', '..');
   if (basename(commonDir) !== '.git') return null; // submodule or unusual layout — not ours to guess
-  return { worktree: found.dir, main: dirname(commonDir), linked: true };
+  return { worktree: found.dir, main: canonical(dirname(commonDir)), linked: true };
 }
 
 // ~/.claude/context/<main-tree-basename>/ — the same folder from every worktree.

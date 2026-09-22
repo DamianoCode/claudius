@@ -72,7 +72,7 @@ import {
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-import { locateRepo } from '../hooks/lib/repo.mjs';
+import { canonical, locateRepo } from '../hooks/lib/repo.mjs';
 import { MODES, configPath as workspaceConfigPath, disabledEverywhere } from '../hooks/lib/workspace.mjs';
 import { detectConfig } from './lib/detect.mjs';
 
@@ -127,14 +127,14 @@ function loadContext(start) {
   if (!/^[A-Za-z0-9._]+(?:-[A-Za-z0-9._]+)*$/.test(prefix)) {
     throw new Refusal(`"prefix" must be a plain folder name (letters, digits, dots, dashes), got "${prefix}".`);
   }
-  const pool = resolve(repo.main, raw.pool ?? `../${basename(repo.main)}-worktrees`);
+  const pool = canonical(resolve(repo.main, raw.pool ?? `../${basename(repo.main)}-worktrees`));
   return {
     configPath,
     raw,
     mode: raw.mode ?? 'worktrees',
     prefix,
     slotName: new RegExp(`^${prefix.replace(/\./g, '\\.')}-(\\d+)$`),
-    start: resolve(start),
+    start: canonical(start),
     main: repo.main,
     pool,
     // Inside the shared .git directory: one copy for every worktree, and out of reach of a
@@ -159,7 +159,7 @@ function worktrees(ctx) {
         return [key, rest.join(' ')];
       }));
       return {
-        path: resolve(fields.worktree),
+        path: canonical(fields.worktree),
         branch: fields.branch?.replace('refs/heads/', '') || null,
         locked: 'locked' in fields,
         lockReason: fields.locked ?? null,
@@ -419,7 +419,7 @@ function take(ctx, branch, { base } = {}) {
 function findSlot(ctx, arg) {
   const all = slots(ctx);
   const slot = arg
-    ? all.find((s) => s.name === arg || s.path === resolve(arg))
+    ? all.find((s) => s.name === arg || s.path === canonical(arg))
     : all.find((s) => ctx.start === s.path || ctx.start.startsWith(s.path + sep));
   if (!slot) throw new Refusal(arg ? `No slot named ${arg}.` : `Not inside a slot — name one: release ${ctx.prefix}-N.`);
   return slot;

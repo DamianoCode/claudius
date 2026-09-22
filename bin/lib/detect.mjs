@@ -4,7 +4,9 @@
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { basename, dirname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, join, relative, sep } from 'node:path';
+
+import { canonical } from '../../hooks/lib/repo.mjs';
 
 const run = (cwd, ...args) => {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
@@ -57,7 +59,7 @@ function detectPool(main) {
   const parents = new Map();
   for (const line of run(main, 'worktree', 'list', '--porcelain').split(/\r?\n/)) {
     if (!line.startsWith('worktree ')) continue;
-    const path = resolve(line.slice('worktree '.length));
+    const path = canonical(line.slice('worktree '.length));
     if (path === main) continue;
     const parent = dirname(path);
     parents.set(parent, (parents.get(parent) ?? 0) + 1);
