@@ -7,7 +7,7 @@ argument-hint: "[topic]"
 
 # Grill
 
-Interview the user relentlessly until you reach a shared understanding of `$ARGUMENTS`. The most common failure in a codebase is not bad code — it is **building the wrong thing correctly**. This skill exists to make that failure visible before implementation, not after.
+Interview the user until you reach a shared understanding of `$ARGUMENTS`. The most common failure in a codebase is not bad code — it is **building the wrong thing correctly**. This skill exists to make that failure visible before implementation, not after.
 
 Respond in the user's language. The user is the domain expert; you are the one who has to be sure.
 
