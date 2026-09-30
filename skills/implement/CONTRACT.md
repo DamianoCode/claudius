@@ -24,8 +24,6 @@ P1 <goal>
 P2 ...
 ```
 
-Each `WORK` item is also one step in the run's visible step list — see "Keep the run visible" in [SKILL.md](./SKILL.md).
-
 When the task came through `claudius:grill`, its `DECISIONS`, `OUT OF SCOPE` and `ACCEPTANCE CRITERIA` blocks **are** the contract and the spec. Do not paraphrase them into something weaker.
 
 ## Plan approval

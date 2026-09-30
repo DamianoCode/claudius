@@ -80,13 +80,6 @@ When the plan commits to something expensive to reverse — a schema or stored-d
 
 When a genuinely new or contested domain term gets settled, call the Skill tool with "claudius:domain-model".
 
-**Keep the run visible.** Off the fast path, whoever is watching the terminal must be able to tell which step the run is on, what is done and what is left. Before section 4, lay the run out as a flat list of steps, taken from what is already decided — never a second plan: reconnaissance (if any), contract (if frozen), one step per `WORK` item or a single "implement", verify, review (if triggered), final gate and report.
-
-- When the session offers a task list tool, keep the steps there — it stays on screen while tools and agents run. Mark a step in progress before starting it or dispatching its agent, and completed when the agent returns or the check passes.
-- Otherwise print the list once, then one line per transition — `step 3/6: verify` — and never the whole list again.
-
-Add a step when a risk trigger fires mid-run or a repair round starts. A worker's own steps stay invisible either way, so name its step after the outcome it was sent for. The fast path gets none of this.
-
 ## 4. Implement and verify
 
 **Who writes the code is a ratio, not a default.** Weigh the size of an honest brief against the size of the work it would describe.
