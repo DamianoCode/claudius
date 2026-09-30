@@ -22,7 +22,7 @@ If the redacted output is not enough to diagnose, say so and ask.
 
 **This is the skill.** Everything else is mechanical. With a tight pass/fail signal that goes red on *this* bug, you will find the cause — bisection, hypothesis testing and instrumentation all just consume it. Without one, no amount of reading code will save you.
 
-Spend disproportionate effort here. Be aggressive, be creative, refuse to give up.
+Most of a diagnosis's effort belongs here.
 
 ### Ways to construct one, roughly in this order
 

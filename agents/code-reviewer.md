@@ -85,7 +85,7 @@ Judge against what was requested, not against what would have been a good idea.
 
 ## Output
 
-Report in the user's language, at most 8 material findings per axis, worst first. **Keep the block's keys exactly as written, in English** — the `SubagentStop` guard looks for them, and a translated key reads as a missing report:
+Report in the user's language, material findings only, worst first. **Keep the block's keys exactly as written, in English** — the `SubagentStop` guard looks for them, and a translated key reads as a missing report:
 
 ```text
 AXIS: <correctness|standards|spec>

@@ -53,7 +53,7 @@ Judge against the goal the caller stated, not against the system you would have 
 
 ## Output
 
-Report in the user's language, and nothing but the block. At most three entries under `OTHER OBJECTIONS`, worst first. **Keep the block's keys exactly as written, in English** — the `SubagentStop` guard looks for them, and a translated key reads as a missing report:
+Report in the user's language, and nothing but the block. Material objections only under `OTHER OBJECTIONS`, worst first. **Keep the block's keys exactly as written, in English** — the `SubagentStop` guard looks for them, and a translated key reads as a missing report:
 
 ```text
 VERDICT: PROCEED | CHANGE | STOP

@@ -46,6 +46,8 @@ The bottom four fire on their own when the task calls for them; you never type t
 
 The model tiering is deliberate: reconnaissance and verification are cheap and mechanical, review and the second opinion are where judgement has to be paid for. Who writes the implementation is not fixed — it is decided per task by comparing the size of an honest brief against the size of the work, because a worker's exploration dies with its context while the same work done in the main conversation stays there for the rest of the session.
 
+The agents name model aliases, not versions, so each tier follows Claude Code's current default for it. From Claude Code 2.1.280, `opus` is Claude Opus 5.5 — on Microsoft Foundry the alias still points at an older Opus. Its default effort is `medium`, one level below Claude Opus 5's; `code-reviewer` and `skeptic` set `high` explicitly, so the judgement tier does not drop a level with the upgrade. `effort` is ignored on the haiku agents, whose model has no effort levels, and takes effect only if their model is overridden.
+
 ### Hooks
 
 - **`SessionStart`** — tells you when a project overlay has gone stale relative to the manifests, rules and schemas it was built from. Silent when fresh, and silent when there is no overlay at all. In a repository with a workspace config, also says in one line which mode it uses and how to start and finish work.
