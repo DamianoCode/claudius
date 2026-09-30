@@ -112,6 +112,37 @@ test('lets a code-reviewer whose final message has REVIEW: stop', () => {
   assert.equal(stopContinuation(result), '');
 });
 
+// --- skeptic contract ---
+
+test('sends back a skeptic whose final message lacks VERDICT:', () => {
+  const result = runHook(HOOK, {
+    hook_event_name: 'SubagentStop',
+    agent_type: 'claudius:skeptic',
+    last_assistant_message: 'I would not build this, it seems risky.',
+  });
+  assert.match(stopContinuation(result), /VERDICT/);
+});
+
+test('lets a skeptic that found nothing to object to stop', () => {
+  // PROCEED with no objection is a complete answer. A guard that demanded a finding
+  // would turn the second opinion into a machine for manufacturing doubt.
+  const result = runHook(HOOK, {
+    hook_event_name: 'SubagentStop',
+    agent_type: 'claudius:skeptic',
+    last_assistant_message: 'VERDICT: PROCEED\n\nSTRONGEST OBJECTION: none',
+  });
+  assert.equal(stopContinuation(result), '');
+});
+
+test('does not accept a verdict outside the three the orchestrator acts on', () => {
+  const result = runHook(HOOK, {
+    hook_event_name: 'SubagentStop',
+    agent_type: 'claudius:skeptic',
+    last_assistant_message: 'VERDICT: MAYBE\n\nSTRONGEST OBJECTION: hard to say',
+  });
+  assert.match(stopContinuation(result), /VERDICT/);
+});
+
 // --- clean-code-engineer contract ---
 
 test('lets a clean-code-engineer that reports NO_CHANGE: with no edits at all stop', () => {

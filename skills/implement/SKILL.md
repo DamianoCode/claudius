@@ -37,7 +37,11 @@ git rev-parse --short HEAD && git status --porcelain
 
 Record `BASE_SHA` and pre-existing dirty paths. Never overwrite unrelated work. Never perform git writes unless the user explicitly asks.
 
-## 1. Two gates before any code
+## 1. Three gates before any code
+
+**Objection gate.** A request is not a settled decision just because it arrived as an instruction. If you would solve this differently — the problem is already solved elsewhere in the repository, a smaller change buys the same result, the approach fights a pattern the codebase relies on — say so **before** classifying: the objection, the evidence for it (`path:line`, a documented rule, a concrete failure scenario), and the alternative, in three lines or fewer. Then let the user choose, and carry out what they choose without reopening it.
+
+An objection needs evidence; a preference is not one, and neither is a risk that applies to every change. **Having none is the normal case** — then say nothing and proceed. Never invent a concern to look rigorous, and never soften one that is real.
 
 **Alignment gate.** If the request leaves a material decision open — the rule behind the example, which data is affected, who may do it, what is out of scope — settle it **before** classifying, with the AskUserQuestion tool, one round of options with your recommendation first.
 
@@ -71,6 +75,8 @@ Not on the fast path? Choose the workflow by engineering risk — see [CLASSIFY.
 Reuse facts already established in this conversation. Read `~/.claude/context/<repo-basename>/PROJECT.md` (verified commands, seams, hazards, enforced rules) and `CONTEXT.md` (domain glossary) when they exist — never create them in the working tree. Neither is required; without them, resolve the same facts from the repository and consider `/claudius:project-profile` afterwards.
 
 When uncertainty remains, run one focused `Explore` for the current implementation, the best analogous pattern, reusable helpers, and contract touchpoints. Ask for paths, symbols and conclusions — never file dumps. A second `Explore` is justified only for an independent question.
+
+When the plan commits to something expensive to reverse — a schema or stored-data shape, a public contract, an effect that leaves the system, a new dependency or architectural seam — and more than one reasonable approach exists, call the Skill tool with "claudius:challenge" **before** freezing the contract. One independent read, not a panel. Skip it when the alternatives were already weighed with the user, such as in a `claudius:grill` `DECISIONS` block, and for anything a revert undoes.
 
 When a genuinely new or contested domain term gets settled, call the Skill tool with "claudius:domain-model".
 

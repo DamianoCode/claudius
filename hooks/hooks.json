@@ -42,7 +42,7 @@
     ],
     "SubagentStop": [
       {
-        "matcher": "^claudius:(clean-code-engineer|test-runner|code-reviewer)$",
+        "matcher": "^claudius:(clean-code-engineer|test-runner|code-reviewer|skeptic)$",
         "hooks": [
           {
             "type": "command",
