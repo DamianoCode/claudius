@@ -27,6 +27,7 @@ const CONTRACTS = {
   'clean-code-engineer': checkEngineer,
   'test-runner': checkTestRunner,
   'code-reviewer': checkReviewer,
+  skeptic: checkSkeptic,
 };
 
 main();
@@ -189,4 +190,9 @@ function checkTestRunner(finalText) {
 function checkReviewer(finalText) {
   if (has(finalText, /(?:^|\n)\s*REVIEW\s*:\s*(?:OK|FINDINGS|NO SPEC)\b/i)) return '';
   return 'Review is incomplete. Continue in the same context and return the required `REVIEW: OK|FINDINGS|NO SPEC` report. Do not broaden scope or perform implementation.';
+}
+
+function checkSkeptic(finalText) {
+  if (has(finalText, /(?:^|\n)\s*VERDICT\s*:\s*(?:PROCEED|CHANGE|STOP)\b/i)) return '';
+  return 'The second opinion is incomplete. Continue in the same context and return the required `VERDICT: PROCEED|CHANGE|STOP` report with STRONGEST OBJECTION / CHEAPER ALTERNATIVE / COST / HOLDS IF. Do not invent an objection to fill it, and do not perform implementation.';
 }
