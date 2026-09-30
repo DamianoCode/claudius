@@ -78,6 +78,8 @@ A normal implementation task should end only after an `Edit`/`Write` or after an
 - `NO_CHANGE: <evidence>` — requested state already exists.
 - `BLOCKED: <specific prerequisite>` — safe completion is impossible within the assigned contract/scope.
 
+Files changed through the shell — a rename, a codemod, a generator, a formatter run — are edits like any other. They need the report below, and neither `NO_CHANGE` nor `BLOCKED` stands in for it.
+
 Report in the user's language, compact but complete. **Keep the block's keys exactly as written, in English** — the `SubagentStop` guard looks for them, and a translated key reads as a missing report:
 
 ```text
