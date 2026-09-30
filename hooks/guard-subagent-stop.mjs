@@ -11,7 +11,7 @@
 // Every uncertainty resolves in the worker's favour. Blocking a worker that finished
 // is a worse failure than missing one that did not.
 
-import { readTail, scanFile, YES, NO } from './lib/transcript.mjs';
+import { readTail, scanFile, YES, NO, UNKNOWN } from './lib/transcript.mjs';
 
 const EXIT_OK = 0;
 
@@ -20,6 +20,29 @@ const SCAN_CHUNK_BYTES = 64 * 1024;
 const SCAN_LIMIT_BYTES = 16 * 1024 * 1024;
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit', 'MultiEdit']);
+const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);
+
+// A fourth answer beside YES / NO / UNKNOWN: no edit tool ran, but a shell command that
+// writes files did. Whether it changed the repository or a temp directory cannot be read
+// off the command, so this is neither "edited" nor "edited nothing".
+const MAYBE = 'maybe';
+
+// Shell commands that write to disk. Deliberately short: a miss leaves the guard where it
+// was before it looked at the shell at all, while a false match costs a finished worker
+// one extra turn. Commands are tested with their quoted strings blanked out, so an arrow
+// in a `node -e` script or a `>` in a grep pattern is not read as a redirect.
+const SHELL_WRITES = [
+  // rm, mv, cp, touch, tee, patch — at the start of a command or after ; & | (
+  /(?:^|[;&|(\n])\s*(?:rm|mv|cp|touch|tee|patch)\s/,
+  // sed -i, perl -i / -pi
+  /\b(?:sed|perl)\b[^|;&\n]*\s-[A-Za-z]*i\b/,
+  /\bgit\s+(?:mv|rm|apply|restore|checkout\s+--|stash\s+(?:pop|apply))(?:\s|$)/,
+  // prettier --write, eslint --fix and the like
+  /\s--(?:write|fix)\b/,
+  /\b(?:Set-Content|Add-Content|Out-File|New-Item|Remove-Item|Move-Item|Copy-Item|Rename-Item)\b/i,
+  // > file and >> file, but not 2>&1, 2>err, >/dev/null, >$null, -> or =>
+  /(?<![-=0-9&>])>>?(?![>&=])\s*(?!\/dev\/null\b|\$null\b|NUL\b)[\w.\/~$\\]/,
+];
 
 const IDENTITY_KEYS = ['agent_type', 'subagent_type', 'agentType', 'agent_name', 'subagent'];
 
@@ -124,27 +147,47 @@ function assistantText(entry) {
     .trim();
 }
 
-// YES / NO / UNKNOWN — an unreadable, missing or oversized transcript is UNKNOWN, and
-// UNKNOWN must never be read as "this worker edited nothing".
+// YES / MAYBE / NO / UNKNOWN — an unreadable, missing or oversized transcript is UNKNOWN,
+// and UNKNOWN must never be read as "this worker edited nothing".
 function editedFiles(path) {
-  return scanFile(path, lineHasEditTool, {
-    chunkBytes: SCAN_CHUNK_BYTES,
-    limitBytes: SCAN_LIMIT_BYTES,
-  });
+  let shellWrote = false;
+
+  // The scan still stops at the first edit tool. A shell write only counts when the whole
+  // transcript was read without finding one, so it is remembered rather than returned.
+  const edited = scanFile(
+    path,
+    (line) => {
+      // Cheap substring gate before the expensive parse — this is what keeps a long
+      // transcript affordable, since almost no line mentions a tool use at all.
+      if (!line.includes('"tool_use"')) return false;
+      const uses = toolUses(parseLine(line));
+      if (uses.some(isEditTool)) return true;
+      shellWrote ||= uses.some(isShellWrite);
+      return false;
+    },
+    { chunkBytes: SCAN_CHUNK_BYTES, limitBytes: SCAN_LIMIT_BYTES },
+  );
+
+  return edited === NO && shellWrote ? MAYBE : edited;
 }
 
-function lineHasEditTool(line) {
-  // Cheap substring gate before the expensive parse — this is what keeps a long
-  // transcript affordable, since almost no line mentions a tool use at all.
-  if (!line.includes('"tool_use"')) return false;
-  return findEditTool(parseLine(line));
+function toolUses(value) {
+  if (!value || typeof value !== 'object') return [];
+  if (value.type === 'tool_use') return [value];
+  return Object.values(value).flatMap(toolUses);
 }
 
-function findEditTool(value) {
-  if (!value || typeof value !== 'object') return false;
-  if (value.type === 'tool_use' && EDIT_TOOLS.has(bareName(String(value.name ?? '')))) return true;
-  if (Array.isArray(value)) return value.some(findEditTool);
-  return Object.values(value).some(findEditTool);
+function isEditTool(use) {
+  return EDIT_TOOLS.has(bareName(String(use.name ?? '')));
+}
+
+function isShellWrite(use) {
+  if (!SHELL_TOOLS.has(bareName(String(use.name ?? '')))) return false;
+  const command = use.input?.command;
+  if (typeof command !== 'string') return false;
+
+  const unquoted = command.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, 'Q');
+  return SHELL_WRITES.some((pattern) => pattern.test(unquoted));
 }
 
 function parseLine(line) {
@@ -173,11 +216,18 @@ function checkEngineer(finalText, transcript) {
   }
   if (edited === NO) return '';
 
-  // Files changed (YES), or we could not tell (UNKNOWN). Either way the orchestrator
-  // needs to know what was touched, so the report is required — including when the
-  // worker gave up partway through and ended on BLOCKED. Where the transcript could not
-  // be read at all, an explicit non-edit exit stands in for it rather than blocking.
-  if (hasReport || (edited !== YES && statedNonEdit)) return '';
+  // Files changed (YES), may have (MAYBE), or we could not tell (UNKNOWN). Either way the
+  // orchestrator needs to know what was touched, so the report is required — including
+  // when the worker gave up partway through and ended on BLOCKED. Where the transcript
+  // could not be read at all, an explicit non-edit exit stands in for it rather than
+  // blocking.
+  if (hasReport || (edited === UNKNOWN && statedNonEdit)) return '';
+
+  // A shell command wrote somewhere. The worker is the only one who knows whether that
+  // was the repository, so it is asked rather than told — it may have changed nothing.
+  if (edited === MAYBE) {
+    return 'No Edit/Write was recorded, but a shell command in this run writes files, and there is no completion report. Continue in the same context. If it changed files in the repository, do not redo the work: return the compact SCOPE / ASSUMPTIONS / CHANGED / TESTS / PUBLIC CONTRACT / HANDOFF / VERIFY / RISKS report — `NO_CHANGE:` or `BLOCKED:` alone does not cover files that changed. If nothing in the repository changed, say so in one line and finish with `NO_CHANGE: <evidence>` or `BLOCKED: <specific prerequisite>`, or implement the assigned behavior now if that is what is still missing.';
+  }
 
   return 'Implementation changed files but did not provide the required completion report. Do not redo the implementation. Inspect your existing work/verification and return the compact SCOPE / ASSUMPTIONS / CHANGED / TESTS / PUBLIC CONTRACT / HANDOFF / VERIFY / RISKS report.';
 }

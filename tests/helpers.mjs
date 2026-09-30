@@ -148,6 +148,17 @@ export function editToolLine(extra = {}) {
   };
 }
 
+// A JSONL line containing a shell tool_use running `command`.
+export function shellToolLine(command, name = 'Bash') {
+  return {
+    type: 'assistant',
+    message: {
+      role: 'assistant',
+      content: [{ type: 'tool_use', name, input: { command } }],
+    },
+  };
+}
+
 export function assistantTextLine(text) {
   return {
     type: 'assistant',

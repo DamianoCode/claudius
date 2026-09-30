@@ -11,6 +11,7 @@ import {
   withTmpDir,
   writeTranscript,
   editToolLine,
+  shellToolLine,
   assistantTextLine,
   buildLargeTranscript,
 } from './helpers.mjs';
@@ -203,6 +204,118 @@ test('sends back a clean-code-engineer that edited but did not return the comple
       last_assistant_message: 'Done, fixed it.',
     });
     assert.match(stopContinuation(result), /completion report/);
+  });
+});
+
+// --- files changed through the shell ---
+
+const FULL_REPORT =
+  'SCOPE: src/\nASSUMPTIONS: none\n\nCHANGED:\n- src/y.js — renamed from src/x.js\n\nTESTS: none\nPUBLIC CONTRACT: none\nHANDOFF: none\nVERIFY:\nRISKS / FOLLOW-UPS: none';
+
+function engineerStop(dir, commands, finalMessage, shell = 'Bash') {
+  const transcript = writeTranscript(dir, [
+    ...commands.map((command) => shellToolLine(command, shell)),
+    assistantTextLine(finalMessage),
+  ]);
+  return runHook(HOOK, {
+    hook_event_name: 'SubagentStop',
+    agent_type: 'claudius:clean-code-engineer',
+    agent_transcript_path: transcript,
+    last_assistant_message: finalMessage,
+  });
+}
+
+test('lets an engineer that changed files only through the shell and reported them stop', () => {
+  withTmpDir(PREFIX, (dir) => {
+    // A rename, a codemod or a generator leaves no Edit/Write behind. Such a worker used
+    // to be told that nothing was recorded and to implement the task again.
+    const result = engineerStop(dir, ['git mv src/x.js src/y.js'], FULL_REPORT);
+    assert.equal(stopContinuation(result), '');
+  });
+});
+
+test('asks an engineer that wrote files through the shell and ended on BLOCKED for a report', () => {
+  withTmpDir(PREFIX, (dir) => {
+    const result = engineerStop(dir, ["sed -i 's/a/b/' src/x.js"], 'BLOCKED: the API contract is missing.');
+    assert.match(stopContinuation(result), /completion report/);
+    assert.match(stopContinuation(result), /shell command/);
+  });
+});
+
+test('does not tell a worker whose shell command may have changed nothing to skip the implementation', () => {
+  withTmpDir(PREFIX, (dir) => {
+    // The guard cannot see whether `rm` hit the repository or a temp directory, so the
+    // request has to leave both endings open instead of asserting that files changed.
+    const result = engineerStop(dir, ['rm -rf /tmp/scratch'], 'I cleaned up and looked around.');
+    assert.match(stopContinuation(result), /NO_CHANGE/);
+    assert.match(stopContinuation(result), /implement the assigned behavior/);
+  });
+});
+
+for (const command of [
+  'cat > src/x.js <<EOF\nexport const a = 1;\nEOF',
+  'echo done >> notes.txt',
+  'npm test && mv a.js b.js',
+  'npx prettier --write src',
+  'npx eslint --fix src',
+  "perl -pi -e 's/a/b/' src/x.js",
+  'git checkout -- src/x.js',
+  'git stash pop',
+  'npm run build | tee build.log',
+]) {
+  test(`reads \`${command.split('\n')[0]}\` as a command that writes files`, () => {
+    withTmpDir(PREFIX, (dir) => {
+      const result = engineerStop(dir, [command], 'NO_CHANGE: nothing to do.');
+      assert.match(stopContinuation(result), /shell command/);
+    });
+  });
+}
+
+for (const command of ['Set-Content -Path src/x.js -Value $text', 'npm test | Out-File result.txt', 'remove-item src/x.js']) {
+  test(`reads PowerShell \`${command}\` as a command that writes files`, () => {
+    withTmpDir(PREFIX, (dir) => {
+      const result = engineerStop(dir, [command], 'NO_CHANGE: nothing to do.', 'PowerShell');
+      assert.match(stopContinuation(result), /shell command/);
+    });
+  });
+}
+
+for (const command of [
+  'npm test 2>&1',
+  'npm run lint > /dev/null',
+  'npm test 2>$null',
+  'git status --porcelain && git --no-pager diff --stat',
+  'git log --format="%an <%ae>" -3',
+  'grep -rn "a > b" src',
+  'node -e "[1].map((x) => x > 0)"',
+  'git stash list',
+  'git checkout main',
+  'ls -la src | head -20',
+  'rg --files-with-matches sed-i',
+]) {
+  test(`does not read \`${command}\` as a command that writes files`, () => {
+    withTmpDir(PREFIX, (dir) => {
+      // Read-only shell use is what almost every engineer run looks like. It must leave
+      // both of the existing outcomes exactly as they were.
+      const stated = engineerStop(dir, [command], 'NO_CHANGE: requested state already exists.');
+      assert.equal(stopContinuation(stated), '');
+
+      const silent = engineerStop(dir, [command], 'I looked around but changed nothing.');
+      assert.match(stopContinuation(silent), /no Edit\/Write was recorded/);
+    });
+  });
+}
+
+test('an edit tool anywhere in the transcript outranks a shell write seen before it', () => {
+  withTmpDir(PREFIX, (dir) => {
+    const transcript = writeTranscript(dir, [shellToolLine('rm -rf dist'), editToolLine()]);
+    const result = runHook(HOOK, {
+      hook_event_name: 'SubagentStop',
+      agent_type: 'claudius:clean-code-engineer',
+      agent_transcript_path: transcript,
+      last_assistant_message: 'Done, fixed it.',
+    });
+    assert.match(stopContinuation(result), /changed files but did not provide/);
   });
 });
 
