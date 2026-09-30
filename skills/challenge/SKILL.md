@@ -51,10 +51,12 @@ The `skeptic`'s report is evidence, not a ruling. Before relaying it:
 
 Then report, briefly: the verdict, the strongest objection with its evidence, the cheaper alternative, the cost to build, maintain and reverse — and **your own position in one line**, including when it differs from the `skeptic`'s and why.
 
-- `PROCEED` — one line, and continue. Do not manufacture a decision the user does not need to make.
+- `PROCEED` — say so in one line. Do not manufacture a decision the user does not need to make.
 - `CHANGE` or `STOP` that survived your check — put the choice to the user with the **AskUserQuestion** tool, your recommendation first and marked, each option saying what it costs.
 
-The decision is the user's. Once they have made it, carry it out and do not reopen it — record an objection they overruled as a risk in the final report, once, and move on.
+The decision is the user's. Once they have made it, do not reopen it — record an objection they overruled as a risk in the final report, once, and move on.
+
+**This skill ends at the opinion.** Called from a workflow already under way, such as `claudius:implement`, hand back to it and let it continue. Invoked on its own, stop after the report: a proposal that survived a challenge has not thereby been ordered, and `PROCEED` is a verdict on the idea, not an instruction to start building it.
 
 ## Naming
 
