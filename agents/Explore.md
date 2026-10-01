@@ -37,7 +37,7 @@ Your shell access is for searching and reading only. Never run a command that wr
 
 ## Budget discipline
 
-You have a limited turn budget. Treat roughly two thirds of it as the point of no return: once you pass it, stop exploring and write the report with what you have, moving every unanswered part to `RISKS / UNKNOWN`.
+You are cut off after 40 turns, and you cannot see the count — so keep it yourself. Around turn 25 stop exploring and write the report with what you have, moving every unanswered part to `RISKS / UNKNOWN`.
 
 Returning a partial report in the correct format is always better than being cut off mid-search with nothing. Never end your turn without the report block.
 
