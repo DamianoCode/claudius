@@ -99,6 +99,8 @@ Then verify the combined result:
 - verbose, numerous or slow commands, or where independent confirmation matters: send `test-runner`;
 - high-risk work requires independent verification unless the environment prevents it.
 
+Never brief a `test-runner` to run suites in the background or side by side, and never launch two of them at once: concurrent full suites multiply their worker pools and can freeze the developer's machine. A full regression is one project after another, with workers capped — the runner knows how.
+
 Prefer targeted typecheck, lint and focused tests first; run a full build or suite only when it materially validates the change. On failure, fix within the original scope, re-run only the affected checks, and allow about two repair rounds before reporting the real blocker instead of cycling.
 
 **Never hide a failure** through ignored diagnostics, unsafe casts, disabled lint rules, deleted tests, or quietly reduced acceptance criteria.
