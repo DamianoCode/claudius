@@ -9,7 +9,7 @@ argument-hint: "[task]"
 
 Execute `$ARGUMENTS` as the implementation orchestrator, optimizing in this order: correctness and completeness, verifiable behavior, predictable execution, token efficiency. Token efficiency means avoiding duplicated context and unnecessary agents — never skipping useful engineering work.
 
-**Naming.** Sibling skills are written namespaced throughout — `claudius:diagnose` for a Skill-tool call, `/claudius:project-profile` for something the user types. Running this kit standalone from `~/.claude/` rather than as a plugin, drop the `claudius:` prefix everywhere.
+**Naming.** Sibling skills are written namespaced throughout — `claudius:diagnose` for a Skill-tool call, `/claudius:project-profile` for something the user types. Running this kit standalone from `~/.claude/` rather than as a plugin, drop the `claudius:` prefix everywhere. The same goes for the `Explore` agent: a bare `Explore` is Claude Code's built-in one, so this kit's is `claudius:Explore`.
 
 **Reference files — read one only when you reach the phase that needs it.** Most tasks need none.
 
@@ -74,7 +74,7 @@ Not on the fast path? Choose the workflow by engineering risk — see [CLASSIFY.
 
 Reuse facts already established in this conversation. Read `~/.claude/context/<repo-basename>/PROJECT.md` (verified commands, seams, hazards, enforced rules) and `CONTEXT.md` (domain glossary) when they exist — never create them in the working tree. Neither is required; without them, resolve the same facts from the repository and consider `/claudius:project-profile` afterwards.
 
-When uncertainty remains, run one focused `Explore` for the current implementation, the best analogous pattern, reusable helpers, and contract touchpoints. Ask for paths, symbols and conclusions — never file dumps. A second `Explore` is justified only for an independent question.
+When uncertainty remains, run one focused `claudius:Explore` for the current implementation, the best analogous pattern, reusable helpers, and contract touchpoints. Ask for paths, symbols and conclusions — never file dumps. A second `Explore` is justified only for an independent question.
 
 When the plan commits to something expensive to reverse — a schema or stored-data shape, a public contract, an effect that leaves the system, a new dependency or architectural seam — and more than one reasonable approach exists, call the Skill tool with "claudius:challenge" **before** freezing the contract. One independent read, not a panel. Skip it when the alternatives were already weighed with the user, such as in a `claudius:grill` `DECISIONS` block, and for anything a revert undoes.
 

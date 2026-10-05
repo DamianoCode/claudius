@@ -93,7 +93,7 @@ Each must be falsifiable: state its prediction.
 
 No prediction means it is a vibe — sharpen or discard it.
 
-**Show the ranked list to the user before testing**, with the **AskUserQuestion** tool — your top-ranked hypothesis first, each option carrying its falsifiable prediction. They often re-rank it instantly ("we deployed exactly that on Tuesday") or have already ruled one out. Cheap checkpoint, large saving. Do not block on it — proceed with your ranking if there is no answer.
+**Show the ranked list to the user before testing** — in plain text, your top-ranked hypothesis first, each with its falsifiable prediction. They often re-rank it instantly ("we deployed exactly that on Tuesday") or have already ruled one out. Cheap checkpoint, large saving. Do not wait for an answer: proceed with your ranking, and re-rank if they reply.
 
 ## Phase 4: Instrument
 

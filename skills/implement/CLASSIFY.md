@@ -12,7 +12,7 @@ Two further conditions call for review without being risks in themselves: a size
 
 A normal feature, bug fix or refactor in one coherent area — several files, one owner, one context, no risk trigger hit.
 
-- At most one focused `Explore`, and only if the important locations and patterns are not already known.
+- At most one focused `claudius:Explore`, and only if the important locations and patterns are not already known.
 - Implement in the main conversation. A worker earns its keep here only when the detail would flood this context or a second scope can run alongside it.
 - Verify after integration.
 - Review when the business logic is non-trivial or the diff justifies it.

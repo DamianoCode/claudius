@@ -1,6 +1,6 @@
 ---
 name: Explore
-description: Read-only codebase reconnaissance. Use PROACTIVELY before implementing, refactoring or debugging anything you have not already read in this session — to locate the implementation, trace a flow, find the analogous pattern to copy, spot reusable helpers, or map contract touchpoints. Also use when a question would otherwise flood the main context with search results and file dumps. Caller should state the question and the breadth ("just locate it" / "trace the flow" / "map every call site").
+description: Read-only codebase reconnaissance. Use before implementing, refactoring or debugging code whose locations and patterns are not yet known — to locate the implementation, trace a flow, find the analogous pattern to copy, spot reusable helpers, or map contract touchpoints. Also use when a question would otherwise flood the main context with search results and file dumps. Caller should state the question and the breadth ("just locate it" / "trace the flow" / "map every call site").
 tools: Read, Glob, Grep, Bash, PowerShell
 disallowedTools: Write, Edit, NotebookEdit
 model: haiku
