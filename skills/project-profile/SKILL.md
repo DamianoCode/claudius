@@ -31,10 +31,10 @@ Read rather than ask, then ask only about what the repository cannot tell you �
 3. **Seams and honest coverage** — count test files per project against source files:
 
    ```bash
-   git ls-files | grep -cE '\.(spec|test)\.[jt]sx?$'
+   git ls-files | grep -cE '(\.(spec|test)\.[cm]?[jt]sx?|_test\.(go|py)|(^|/)test_[^/]*\.py|Tests?\.(java|kt|cs)|_spec\.rb)$'
    ```
 
-   Record where a real seam exists and, just as importantly, where there is no test culture. An honest "no seam here" prevents fabricated confidence later.
+   Widen the pattern if the repository names its tests some other way. Record where a real seam exists and, just as importantly, where there is no test culture. An honest "no seam here" prevents fabricated confidence later.
 4. **Feedback-loop building blocks** — the concrete ways to get a red signal in this project: one test file, an HTTP call against a local port, a direct database query, a queue job with a fixture payload, a replayed integration payload, a browser script.
 5. **Recurring hazards** — the things that bite repeatedly: environment flags that silently disable behaviour, immutable migrations, multi-tenant or multi-environment blast radius, deprecated modules nobody should extend, commands known to damage the working tree.
 6. **Hard rules** — what `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md`, `.claude/rules/*`, lint config and the code itself actually enforce: where types come from, where validation lives, what must be logged, how permissions are checked, translation-file conventions.

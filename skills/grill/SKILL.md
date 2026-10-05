@@ -34,7 +34,7 @@ When a round would exceed four questions, ask the four that unlock the most and 
 
 ## Facts are your job, decisions are theirs
 
-When a frontier question needs a fact from the environment — how something is currently implemented, which tenants use it, whether a column exists, what a job actually enqueues — **find it yourself**. Dispatch `Explore` or read the code. Never ask the user for anything you could look up.
+When a frontier question needs a fact from the environment — how something is currently implemented, which tenants use it, whether a column exists, what a job actually enqueues — **find it yourself**. Dispatch `claudius:Explore` or read the code. Never ask the user for anything you could look up.
 
 Do not block on it: a running exploration is an unsettled prerequisite, so only the questions downstream of it wait. Ask the rest of the frontier now.
 

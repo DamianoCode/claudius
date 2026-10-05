@@ -60,39 +60,6 @@ When designing an interface, ask: can I reduce the number of methods? Can I simp
 - **The interface is the test surface.** Callers and tests cross the same seam. Wanting to test *past* the interface means the module is probably the wrong shape.
 - **One adapter means a hypothetical seam. Two adapters means a real one.** Do not introduce a seam unless something actually varies across it. This is the main defence against speculative generality.
 
-## Designing for testability
-
-1. **Accept dependencies, do not create them.**
-
-   ```typescript
-   // testable
-   function processOrder(order: Order, gateway: PaymentGateway) {}
-
-   // hard to test
-   function processOrder(order: Order) {
-     const gateway = new StripeGateway();
-   }
-   ```
-
-2. **Return results, do not produce side effects.**
-
-   ```typescript
-   // testable
-   function calculateDiscount(cart: Cart): Discount {}
-
-   // hard to test
-   function applyDiscount(cart: Cart): void { cart.total -= discount; }
-   ```
-
-3. **Small surface area.** Fewer methods means fewer tests; fewer parameters means simpler setup.
-
-## Relationships
-
-- A **module** has exactly one **interface** — the surface it presents to callers and tests.
-- **Depth** is a property of a module, measured against its interface.
-- A **seam** is where a module's interface lives; an **adapter** sits at a seam and satisfies the interface.
-- Depth produces **leverage** for callers and **locality** for maintainers.
-
 ## Rejected framings
 
 - **Depth as a ratio of implementation lines to interface lines** — rewards padding the implementation. Use depth-as-leverage instead.
@@ -108,7 +75,7 @@ Which seams are real in *this* repository is a project fact, not a design princi
 When no overlay exists, establish it cheaply before proposing a seam:
 
 ```bash
-git ls-files | grep -E '\.(spec|test)\.[jt]sx?$' | cut -d/ -f1-2 | sort | uniq -c | sort -rn
+git ls-files | grep -E '(\.(spec|test)\.[cm]?[jt]sx?|_test\.(go|py)|(^|/)test_[^/]*\.py|Tests?\.(java|kt|cs)|_spec\.rb)$' | cut -d/ -f1-2 | sort | uniq -c | sort -rn
 ```
 
-Areas with near-zero test files have no seam culture yet. **Say that plainly** rather than proposing a test at a seam nobody maintains — a lone test in an untested area is usually deleted or left failing, and pretending otherwise is worse than admitting the gap.
+Widen the pattern first if the repository names its tests some other way. Areas with near-zero test files have no seam culture yet. **Say that plainly** rather than proposing a test at a seam nobody maintains — a lone test in an untested area is usually deleted or left failing, and pretending otherwise is worse than admitting the gap.
