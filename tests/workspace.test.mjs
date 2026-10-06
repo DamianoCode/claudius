@@ -247,6 +247,19 @@ test('a slot that lost its pool lock is still a slot, and take locks it again', 
   });
 });
 
+test('a worktree in the pool locked for another reason is never taken as a slot', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, {});
+    const path = join(w.pool, 'slot-1');
+    git(w.main, 'worktree', 'add', '-q', '--detach', path);
+    git(w.main, 'worktree', 'lock', '--reason', 'claude session x (pid 1)', path);
+
+    const result = slot(w, ['take', 'feat/a']);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /locked by something else \(claude session x/);
+  });
+});
+
 test('take checks out an existing remote branch with tracking', () => {
   withTmpDir('claudius-pool-', (boundary) => {
     const w = world(boundary, {});
@@ -385,6 +398,7 @@ test('a worktree that only looks like a slot is never claimed or cleaned', () =>
 
     const taken = slot(w, ['take', 'feat/a']);
     assert.equal(taken.status, 2, 'slot-1 is taken by a foreign worktree, so the name cannot be reused');
+    assert.match(taken.stderr, /without the pool's lock or mark/);
     assert.ok(existsSync(join(lookalike, 'work.txt')), 'the foreign worktree is untouched');
   });
 });

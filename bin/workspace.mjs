@@ -406,7 +406,15 @@ function pickSlot(ctx, ref) {
   if (n > ctx.size) throw new Refusal(`All ${ctx.size} slots are claimed. Release one (release / sweep) or raise "size".`);
   const name = `${ctx.prefix}-${n}`;
   const path = join(ctx.pool, name);
-  if (existsSync(path)) throw new Refusal(`${path} exists but is not a slot of this repository.`);
+  if (existsSync(path)) {
+    const other = worktrees(ctx).find((wt) => wt.path === canonical(path));
+    if (other?.locked) {
+      throw new Refusal(`${path} is a worktree locked by something else (${other.lockReason || 'no reason given'}), so it is not a slot. Wait for it to finish, or unlock it.`);
+    }
+    throw new Refusal(other
+      ? `${path} is a worktree without the pool's lock or mark, so it is not a slot. If it is one, lock it back: git worktree lock --reason "${LOCK_REASON}" "${path}"`
+      : `${path} exists but is not a worktree of this repository. Move it away, or set another "prefix".`);
+  }
   log(`Creating ${name}…`);
   ensureExcluded(ctx);
   git(ctx.main, 'worktree', 'add', '--detach', path, ref);
