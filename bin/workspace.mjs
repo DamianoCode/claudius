@@ -167,9 +167,30 @@ function worktrees(ctx) {
     });
 }
 
+// A slot also carries a mark in its own folder under .git/worktrees, which goes when the
+// worktree goes. The lock can be lifted by others — `git worktree unlock`, a tool that clears
+// locks it did not write — and the mark is what still tells a slot from a lookalike then.
+const SLOT_MARK = 'claudius-slot';
+
+function adminDir(path) {
+  try {
+    const match = readFileSync(join(path, '.git'), 'utf8').match(/^gitdir:\s*(.+?)\s*$/m);
+    return match ? resolve(path, match[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+const marked = (wt) => {
+  const dir = adminDir(wt.path);
+  return dir !== null && existsSync(join(dir, SLOT_MARK));
+};
+
 // Name and place alone are not enough: `claude -w slot-3` lands in the same directory.
-// Only a worktree carrying the pool's own lock is a slot — anything else is never cleaned.
-const isSlot = (ctx, wt) => dirname(wt.path) === ctx.pool && ctx.slotName.test(basename(wt.path)) && wt.lockReason === LOCK_REASON;
+// A slot carries the pool's lock, or — once someone lifted it — the pool's mark and no
+// other lock. Anything else is never cleaned.
+const isSlot = (ctx, wt) => dirname(wt.path) === ctx.pool && ctx.slotName.test(basename(wt.path))
+  && (wt.lockReason === LOCK_REASON || (!wt.locked && marked(wt)));
 const slotNumber = (ctx, name) => Number(name.match(ctx.slotName)[1]);
 
 function slots(ctx) {
@@ -356,6 +377,20 @@ function slotHoldingBranch(ctx, branch) {
   return { path: holder.path, name, adopted: true };
 }
 
+function mark(path) {
+  const dir = adminDir(path);
+  if (dir && !existsSync(join(dir, SLOT_MARK))) writeFileSync(join(dir, SLOT_MARK), `${LOCK_REASON}\n`);
+}
+
+// Puts back a lifted lock, and marks slots made before the mark existed.
+function lockAndMark(ctx, slot) {
+  if (!slot.locked) {
+    git(ctx.main, 'worktree', 'lock', '--reason', LOCK_REASON, slot.path);
+    log(`  ${slot.name} had lost its pool lock — locked again.`);
+  }
+  mark(slot.path);
+}
+
 function pickSlot(ctx, ref) {
   const existing = slots(ctx);
   const free = existing.find((s) => claimState(readClaim(ctx, s.name)) === 'free' && isClean(s.path))
@@ -371,11 +406,20 @@ function pickSlot(ctx, ref) {
   if (n > ctx.size) throw new Refusal(`All ${ctx.size} slots are claimed. Release one (release / sweep) or raise "size".`);
   const name = `${ctx.prefix}-${n}`;
   const path = join(ctx.pool, name);
-  if (existsSync(path)) throw new Refusal(`${path} exists but is not a slot of this repository.`);
+  if (existsSync(path)) {
+    const other = worktrees(ctx).find((wt) => wt.path === canonical(path));
+    if (other?.locked) {
+      throw new Refusal(`${path} is a worktree locked by something else (${other.lockReason || 'no reason given'}), so it is not a slot. Wait for it to finish, or unlock it.`);
+    }
+    throw new Refusal(other
+      ? `${path} is a worktree without the pool's lock or mark, so it is not a slot. If it is one, lock it back: git worktree lock --reason "${LOCK_REASON}" "${path}"`
+      : `${path} exists but is not a worktree of this repository. Move it away, or set another "prefix".`);
+  }
   log(`Creating ${name}…`);
   ensureExcluded(ctx);
   git(ctx.main, 'worktree', 'add', '--detach', path, ref);
   git(ctx.main, 'worktree', 'lock', '--reason', LOCK_REASON, path);
+  mark(path);
   return { path, name, fresh: true };
 }
 
@@ -384,6 +428,7 @@ function take(ctx, branch, { base } = {}) {
   const ref = baseRef(ctx, base);
 
   const slot = withMutex(ctx, () => {
+    for (const s of slots(ctx)) lockAndMark(ctx, s);
     const chosen = (branch && slotHoldingBranch(ctx, branch)) || pickSlot(ctx, ref);
     writeClaim(ctx, chosen.name, branch);
     return chosen;
