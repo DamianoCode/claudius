@@ -232,6 +232,21 @@ test('a claimed slot is never handed out twice, and the pool stops at its size',
   });
 });
 
+test('a slot that lost its pool lock is still a slot, and take locks it again', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, {});
+    const path = lastLine(slot(w, ['take', 'feat/a']).stdout);
+    assert.equal(slot(w, ['release'], path).status, 0);
+    git(w.main, 'worktree', 'unlock', path);
+
+    const again = slot(w, ['take', 'feat/b']);
+    assert.equal(again.status, 0, again.stderr);
+    assert.equal(lastLine(again.stdout), path);
+    assert.match(again.stderr, /slot-1 had lost its pool lock/);
+    assert.match(git(w.main, 'worktree', 'list', '--porcelain'), /locked claudius worktree pool/);
+  });
+});
+
 test('take checks out an existing remote branch with tracking', () => {
   withTmpDir('claudius-pool-', (boundary) => {
     const w = world(boundary, {});
