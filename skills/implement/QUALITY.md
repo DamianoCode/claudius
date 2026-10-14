@@ -1,6 +1,6 @@
 # Implementation quality
 
-The bar for code written under `implement`, whoever writes it — the main conversation on the fast path and at STANDARD, or a `clean-code-engineer` on a delegated scope. Moving the default writer must not move the bar with it.
+The bar for code written under `implement`, whoever writes it — the main conversation on the fast path and at STANDARD, or a `clean-code-engineer` on a delegated scope.
 
 This file is the canonical copy. `agents/clean-code-engineer.md` carries the same rules inline, because an agent's instructions have to be self-contained: it runs inside the user's repository and cannot resolve a path into the plugin. A test compares the two lists and fails when they drift, so there is still only one of them to edit.
 

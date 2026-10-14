@@ -49,7 +49,7 @@ VERIFY SUGGESTION: <narrow check(s)>
 
 Do not impose an arbitrary tool-call budget. A few extra reads are far cheaper than a wrong implementation; the brief exists so that *broad* rediscovery is unnecessary, not so that reading is rationed.
 
-For a parallel wave: disjoint scopes, contract already frozen, two or three workers at most, no orchestrator edits inside an active worker's scope, and `HANDOFF` integrated after the wave.
+Brief every worker of a parallel wave this way too; when a wave is allowed and how it runs is in [CLASSIFY.md](./CLASSIFY.md).
 
 ## Integration
 
