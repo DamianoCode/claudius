@@ -65,3 +65,10 @@ test('the orchestrator actually points writers at the canonical rules', () => {
   const spine = read(join(REPO_ROOT, 'skills', 'implement', 'SKILL.md'));
   assert.match(spine, /\[QUALITY\.md\]\(\.\/QUALITY\.md\)/);
 });
+
+test('diagnose holds its fix to the same canonical rules', () => {
+  // A bug fix is still code. Without the link, diagnose fixes escape the bar that every
+  // implement change is held to.
+  const diagnose = read(join(REPO_ROOT, 'skills', 'diagnose', 'SKILL.md'));
+  assert.match(diagnose, /\[QUALITY\.md\]\(\.\.\/implement\/QUALITY\.md\)/);
+});

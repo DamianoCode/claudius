@@ -113,11 +113,17 @@ Write the regression test **before the fix**, but only if a **correct seam** exi
 
 **If no correct seam exists, that is itself the finding.** State it: the architecture is preventing the bug from being locked down.
 
+**Before writing the fix**, read [QUALITY.md](../implement/QUALITY.md) — the same bar as any other code change — and look at where the fix belongs:
+
+- **Fix the cause, not the symptom.** The fix goes where the confirmed hypothesis points, not where the error surfaced. A guard at the crash site that leaves the wrong value flowing is a second bug.
+- **Reuse before writing.** Search for an existing helper, validator, type or pattern that already does what the fix needs, and call it. A fix that adds a near-copy of existing logic plants the next divergence.
+- **Find the siblings.** Grep for every other call site that shares the faulty pattern. When they share the cause, fix it once at the shared point so all of them are covered; when a sibling is independent and outside the task, list it in the report instead of patching it silently.
+
 With a correct seam:
 
 1. Turn the minimised repro into a failing test there.
 2. Watch it fail.
-3. Apply the smallest fix.
+3. Apply the smallest fix that removes the cause everywhere it applies.
 4. Watch it pass.
 5. Re-run the Phase 1 loop against the original, un-minimised scenario.
 
@@ -127,6 +133,7 @@ Required before declaring done:
 
 - [ ] Original repro no longer reproduces (re-run the Phase 1 loop).
 - [ ] Regression test passes, or the absence of a seam is documented.
+- [ ] The fix reuses existing code instead of duplicating it, and every sibling call site sharing the cause is covered or listed.
 - [ ] All `[DEBUG-...]` instrumentation removed — grep the prefix to prove it.
 - [ ] Throwaway harnesses deleted or moved to the scratchpad.
 - [ ] The hypothesis that turned out correct is stated in the report and in the suggested commit message, so the next person learns from it.
