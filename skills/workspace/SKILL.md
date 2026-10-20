@@ -32,7 +32,7 @@ The edit guard refuses protected paths while the checkout sits on a protected br
 
 ## In both modes
 
-`release` refuses while anything is uncommitted or unpushed. `--force` discards that work — the user's call, never a way past the refusal. A released branch stays, so an open pull request resumes with `take <same-branch>`.
+`release` refuses while anything is uncommitted or unpushed. In worktrees mode `release --force` discards that work — the user's call, never a way past the refusal; branches mode has no override. A released branch stays, so an open pull request resumes with `take <same-branch>`.
 
 `status` shows the mode, every slot and worktree with its pull request. `sweep` lists slots and old worktrees whose pull request has merged or whose session has ended; `sweep --yes` frees and removes them. Removing is the user's call — show the dry run first.
 
