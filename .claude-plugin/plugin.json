@@ -2,7 +2,7 @@
   "name": "claudius",
   "displayName": "Claudius",
   "version": "0.5.2",
-  "description": "An implementation workflow for real engineering: a risk-classifying orchestrator, five tiered subagents, and the disciplines that stop the two expensive failures — building the wrong thing, and fixing a bug you never located.",
+  "description": "An implementation workflow for real engineering: a risk-classifying orchestrator, six tiered subagents, and the disciplines that stop the two expensive failures — building the wrong thing, and fixing a bug you never located.",
   "author": {
     "name": "DamianoCode"
   },
@@ -20,6 +20,7 @@
   "skills": "./skills/",
   "agents": [
     "./agents/Explore.md",
+    "./agents/breaker.md",
     "./agents/clean-code-engineer.md",
     "./agents/code-reviewer.md",
     "./agents/skeptic.md",

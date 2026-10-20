@@ -144,6 +144,51 @@ test('does not accept a verdict outside the three the orchestrator acts on', () 
   assert.match(stopContinuation(result), /VERDICT/);
 });
 
+// --- breaker contract ---
+
+test('sends back a breaker whose final message lacks BREAKER:', () => {
+  const result = runHook(HOOK, {
+    hook_event_name: 'SubagentStop',
+    agent_type: 'claudius:breaker',
+    last_assistant_message: 'I found a few weak spots in the validation.',
+  });
+  assert.match(stopContinuation(result), /BREAKER/);
+});
+
+test('lets a breaker whose target held stop', () => {
+  // HELD is a complete answer. A guard that demanded a break would push the breaker
+  // into reporting suspicions it never made fail.
+  const result = runHook(HOOK, {
+    hook_event_name: 'SubagentStop',
+    agent_type: 'claudius:breaker',
+    last_assistant_message: 'BREAKER: HELD\n\nBREAKS: none\nATTEMPTED: hostile input, concurrency',
+  });
+  assert.equal(stopContinuation(result), '');
+});
+
+test('lets a breaker that wrote probes stop without an implementation report', () => {
+  // Writing probes is its job, not an implementation; the engineer's contract must not
+  // apply to it.
+  withTmpDir('claudius-breaker-', (dir) => {
+    const result = runHook(HOOK, {
+      hook_event_name: 'SubagentStop',
+      agent_type: 'claudius:breaker',
+      agent_transcript_path: writeTranscript(dir, [editToolLine()]),
+      last_assistant_message: 'BREAKER: BROKEN\n\nBREAKS:\n- [HIGH] duplicate order',
+    });
+    assert.equal(stopContinuation(result), '');
+  });
+});
+
+test('does not accept a breaker result outside the three the caller acts on', () => {
+  const result = runHook(HOOK, {
+    hook_event_name: 'SubagentStop',
+    agent_type: 'claudius:breaker',
+    last_assistant_message: 'BREAKER: PARTIAL\n\nBREAKS: maybe',
+  });
+  assert.match(stopContinuation(result), /BREAKER/);
+});
+
 // --- clean-code-engineer contract ---
 
 test('lets a clean-code-engineer that reports NO_CHANGE: with no edits at all stop', () => {
