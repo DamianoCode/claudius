@@ -28,7 +28,7 @@ Give the `spec` reviewer the spec and **nothing that argues for the implementati
 
 Aggregate the blocks under their axis headings. **Do not merge or rerank across axes**, and do not name a single worst finding overall — that reranking is exactly what the separation prevents.
 
-- `HIGH` — verify the evidence against the code before fixing.
+- `HIGH` — verify the evidence against the code before fixing. For a `correctness` HIGH, the confirmation is a red test at the seam where the defect lives, and that test stays as the regression test; a red `PROBE` tells you where to aim, it does not replace the test. Where no such seam exists, say so and verify against the code.
 - `MEDIUM` — fix when credible and within task scope.
 - A `spec` scope-creep finding is fixed by **removing** the extra behavior, not by justifying it.
 - Advisory ideas become follow-ups, never automatic scope growth.

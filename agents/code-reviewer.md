@@ -35,6 +35,10 @@ Check, as applicable:
 6. **Test adequacy** — important new behavior or the bug path left unprotected where a local test pattern exists.
 7. **Side effects that leave the system** — new calls to third parties, payments, messages, stock movements: are they guarded, idempotent and correct under retry? Check them against the hazards listed in the project overlay.
 
+**Run the suspicion where you cheaply can.** A finding argued from reading is weaker than one shown by running. Before reporting a suspicion about a boundary, authorization, data integrity or a failing dependency, try one throwaway probe against it with hostile input — empty, oversized, malformed, duplicated, out of order, a dependency that throws: a one-off `node -e` or `python -c`, or the project's runner pointed at one existing test file. Record it under the finding as `PROBE: <command> -> <result>`; a suspicion you could not run stays a finding judged on the reading, marked `PROBE: UNPROVEN`. A clean probe disproves a suspicion only when it actually exercised the path in question — then it goes under `CHECKED AND DISMISSED`. A single-shot probe cannot disprove a race, an ordering or a retry problem; such a suspicion stays a finding, with `PROBE: UNPROVEN`.
+
+Probes stay light and leave nothing behind. Other reviewers run beside you on the same machine, so never a suite, a build, a watch mode or a stress loop. Bound every probe in time inside the command itself — `timeout 20 …`, or a `setTimeout(() => process.exit(124), 15000)` in the script — because a command that outlives the tool's timeout is not killed and keeps running. Never write a file, never touch a real database or network service, never trigger an effect that leaves the process.
+
 `HIGH` = likely correctness, security or data-integrity failure, or a broken contract.
 `MEDIUM` = credible regression within this task that should be fixed before merge.
 
@@ -94,6 +98,7 @@ REVIEW: OK | FINDINGS | NO SPEC
 - [HIGH|MEDIUM] <file:line> — <problem>
   PATH: <how it fails / which rule or requirement is violated>
   FIX: <minimal correction>
+  PROBE: <command> -> <result>, or UNPROVEN — correctness axis only
 
 COVERAGE GAP: <material missing verification or test, or none>
 CHECKED AND DISMISSED: <suspicions you disproved, or none>
