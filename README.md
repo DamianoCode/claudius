@@ -1,6 +1,6 @@
 # Claudius
 
-An implementation workflow for Claude Code. One orchestrator that classifies work by engineering risk, six subagents on tiered models, and the disciplines that prevent the two expensive failures: **building the wrong thing correctly**, and **fixing a bug you never actually located**.
+An implementation workflow for Claude Code. One orchestrator that classifies work by engineering risk, eight subagents on tiered models, and the disciplines that prevent the two expensive failures: **building the wrong thing correctly**, and **fixing a bug you never actually located**.
 
 Nothing here is a process framework. Every piece is a plain Markdown file you are meant to fork and rewrite.
 
@@ -32,6 +32,7 @@ That builds a private overlay — commands, seams, hazards, rules — outside th
 | `/claudius:project-profile` | you | Builds the private per-project overlay. Verified commands only. |
 | `/claudius:challenge` | you or model | One independent second opinion on an approach before it is built: a single `skeptic` in a clean context, given the proposal without the case for it. Fires on its own only when a plan commits to something expensive to reverse. |
 | `/claudius:break` | you | Attacks one feature that matters — hostile input, boundaries, concurrency, failing dependencies — with a single `breaker`, and reports only what it made fail, each break with a reproduction that ran. On demand only, never a step of `implement`. |
+| `/claudius:security-audit` | you | Audits the trust boundaries you pick: one to three `security-auditor` agents trace attacker-controlled input to the sink, a fresh `security-verifier` tries to refute each serious finding, and every finding comes with its source trace, the control that fails and the smallest fix. Says what it did not cover, and keeps its state privately so the next run targets what changed. On demand only; for the pending diff use the built-in `/security-review`. |
 | `claudius:diagnose` | model | Six-phase bug discipline. Phase 1 is the whole skill: **no red-capable command, no hypotheses.** |
 | `claudius:domain-model` | model | Glossary and decision records — kept private, never written into the repository. |
 | `claudius:codebase-design` | model | Vocabulary for deep modules: interface, depth, seam, adapter, leverage, locality. |
@@ -43,11 +44,11 @@ The bottom four fire on their own when the task calls for them; you never type t
 
 ### Agents
 
-`Explore` (haiku, read-only recon) · `clean-code-engineer` (sonnet, implementation inside an explicit write scope) · `test-runner` (haiku, isolated verification) · `code-reviewer` (opus, review on one explicit axis) · `skeptic` (opus, read-only second opinion on a proposal before any code exists) · `breaker` (opus, adversarial testing of one feature, writing only its own probes outside the repository).
+`Explore` (haiku, read-only recon) · `clean-code-engineer` (sonnet, implementation inside an explicit write scope) · `test-runner` (haiku, isolated verification) · `code-reviewer` (opus, review on one explicit axis) · `skeptic` (opus, read-only second opinion on a proposal before any code exists) · `breaker` (opus, adversarial testing of one feature, writing only its own probes outside the repository) · `security-auditor` (opus, read-only audit of named trust boundaries) · `security-verifier` (opus, read-only attempt to refute one serious finding).
 
-The model tiering is deliberate: reconnaissance and verification are cheap and mechanical, review, the second opinion and the attack are where judgement has to be paid for. Who writes the implementation is not fixed — it is decided per task by comparing the size of an honest brief against the size of the work, because a worker's exploration dies with its context while the same work done in the main conversation stays there for the rest of the session.
+The model tiering is deliberate: reconnaissance and verification are cheap and mechanical, review, the second opinion, the attack and the audit are where judgement has to be paid for. Who writes the implementation is not fixed — it is decided per task by comparing the size of an honest brief against the size of the work, because a worker's exploration dies with its context while the same work done in the main conversation stays there for the rest of the session.
 
-The agents name model aliases, not versions, so each tier follows Claude Code's current default for it. From Claude Code 2.1.280, `opus` is Claude Opus 5.5 — on Microsoft Foundry the alias still points at an older Opus. Its default effort is `medium`, one level below Claude Opus 5's; `code-reviewer`, `skeptic` and `breaker` set `high` explicitly, so the judgement tier does not drop a level with the upgrade. `effort` on the haiku agents takes effect when `haiku` resolves to Claude Haiku 5.5, whose default is the same `medium` they set; on Claude Haiku 4.5, which has no effort levels, it is ignored.
+The agents name model aliases, not versions, so each tier follows Claude Code's current default for it. From Claude Code 2.1.280, `opus` is Claude Opus 5.5 — on Microsoft Foundry the alias still points at an older Opus. Its default effort is `medium`, one level below Claude Opus 5's; `code-reviewer`, `skeptic`, `breaker` and the two security agents set `high` explicitly, so the judgement tier does not drop a level with the upgrade. `effort` on the haiku agents takes effect when `haiku` resolves to Claude Haiku 5.5, whose default is the same `medium` they set; on Claude Haiku 4.5, which has no effort levels, it is ignored.
 
 ### Hooks
 
@@ -55,7 +56,7 @@ The agents name model aliases, not versions, so each tier follows Claude Code's 
 - **`PreToolUse`** — in a repository with a workspace config, refuses edits to protected paths on shared ground — the main tree in worktrees mode, a protected branch in branches mode — and answers with the command that fixes it. Silent everywhere else, and never spawns a process, because it runs on every edit.
 - **`PostToolUse`** — collapses long successful test/lint/build output to the lines that carry signal, deciding from the shape of the output rather than a list of command names. Anything that looks like a failure passes through whole.
 - **`SessionEnd`** — in worktrees mode, frees the ending session's slots when nothing in them would be lost. Never blocks an exit.
-- **`SubagentStop`** — refuses a worker that stopped without editing anything or without its completion report — a reviewer without its `REVIEW`, a skeptic without its `VERDICT`, a breaker without its `BREAKER` — and asks it to continue in the same context once. Never loops. The request arrives as feedback rather than a hook error, which needs Claude Code 2.1.163 or later.
+- **`SubagentStop`** — refuses a worker that stopped without editing anything or without its completion report — a reviewer without its `REVIEW`, a skeptic without its `VERDICT`, a breaker without its `BREAKER`, an auditor without its `AUDIT`, a verifier without its `VERIFY` — and asks it to continue in the same context once. Never loops. The request arrives as feedback rather than a hook error, which needs Claude Code 2.1.163 or later.
 
 ## Four ideas worth stealing even if you take nothing else
 
@@ -69,11 +70,12 @@ The agents name model aliases, not versions, so each tier follows Claude Code's 
 
 ## The private context directory
 
-Up to three files live per repository under `~/.claude/context/<repo-basename>/`, and **never inside the working tree** — a shared repository should not gain files that change how a whole team works:
+Up to four files live per repository under `~/.claude/context/<repo-basename>/`, and **never inside the working tree** — a shared repository should not gain files that change how a whole team works:
 
 - `PROJECT.md` — engineering mechanics: stack, verified commands, real seams, hazards, hard rules. Written by `project-profile`.
 - `CONTEXT.md` — the domain glossary. Written by `domain-model`, one confirmed term at a time.
 - `workspace.json` — how work in progress is isolated: worktree slots or branches. See `skills/workspace/SKILL.md`.
+- `SECURITY.md` — open findings, what needs validation, and which boundaries were covered at which commit. Written by `security-audit`, never with a secret's value in it. See [SECURITY-FORMAT](skills/security-audit/SECURITY-FORMAT.md).
 
 The folder is named after the **main** working tree, so a session inside a linked worktree reads the same files.
 
@@ -81,7 +83,7 @@ All are optional. Without them every skill still works; it just re-derives the s
 
 ## Language
 
-The skills and agents are written in English. They answer in whatever language you write in, and the private notes they produce follow the language your team actually speaks. Only the structural keys stay in English, because the skills and the hooks find each other by them: `DECISIONS`, `OUT OF SCOPE`, `ACCEPTANCE CRITERIA` and `OPEN RISKS` from an interview; `SCOPE`, `CHANGED`, `RESULT`, `REVIEW`, `AXIS`, `VERDICT` and `BREAKER` from the agents. Trigger phrases in a skill description are the other exception — they are matched against what the user actually types, so they stay multilingual.
+The skills and agents are written in English. They answer in whatever language you write in, and the private notes they produce follow the language your team actually speaks. Only the structural keys stay in English, because the skills and the hooks find each other by them: `DECISIONS`, `OUT OF SCOPE`, `ACCEPTANCE CRITERIA` and `OPEN RISKS` from an interview; `SCOPE`, `CHANGED`, `RESULT`, `REVIEW`, `AXIS`, `VERDICT`, `BREAKER`, `AUDIT` and `VERIFY` from the agents, and the headings of `SECURITY.md`. Trigger phrases in a skill description are the other exception — they are matched against what the user actually types, so they stay multilingual.
 
 ## Development
 
@@ -142,6 +144,6 @@ Pick one or the other: either keep the standalone files, or delete them and the 
 
 ## Credits
 
-The `diagnose`, `grill`, `domain-model` and `codebase-design` skills are adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT), as is the Fowler smell baseline used by the Standards review axis. The orchestrator, the agents, the hooks and the private-overlay convention are original.
+The `diagnose`, `grill`, `domain-model` and `codebase-design` skills are adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT), as is the Fowler smell baseline used by the Standards review axis. The method of the `security-audit` skill and its agents — working from an invariant, the evidence gate, the severity anchors, a verifier that never found the claim it checks — is adapted from [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) (MIT). The orchestrator, the agents, the hooks and the private-overlay convention are original.
 
 MIT.

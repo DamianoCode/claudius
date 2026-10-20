@@ -30,6 +30,8 @@ const GUARDED = {
   'code-reviewer': /(?:^|\n)\s*REVIEW\s*:\s*(?:OK|FINDINGS|NO SPEC)\b/i,
   skeptic: /(?:^|\n)\s*VERDICT\s*:\s*(?:PROCEED|CHANGE|STOP)\b/i,
   breaker: /(?:^|\n)\s*BREAKER\s*:\s*(?:BROKEN|HELD|BLOCKED)\b/i,
+  'security-auditor': /(?:^|\n)\s*AUDIT\s*:\s*(?:FINDINGS|NONE FOUND|BLOCKED)\b/i,
+  'security-verifier': /(?:^|\n)\s*VERIFY\s*:\s*(?:CONFIRMED|NEEDS VALIDATION|REJECTED)\b/i,
 };
 
 function everyHookCommand() {
@@ -182,7 +184,7 @@ test('a report copied verbatim from the clean-code-engineer template passes the 
   }
 });
 
-for (const agent of ['test-runner', 'code-reviewer', 'skeptic', 'breaker']) {
+for (const agent of ['test-runner', 'code-reviewer', 'skeptic', 'breaker', 'security-auditor', 'security-verifier']) {
   test(`a report copied verbatim from the ${agent} template passes the guard`, () => {
     const result = runHook('guard-subagent-stop.mjs', {
       hook_event_name: 'SubagentStop',

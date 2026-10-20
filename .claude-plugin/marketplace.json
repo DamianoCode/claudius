@@ -9,7 +9,7 @@
     {
       "name": "claudius",
       "source": "./",
-      "description": "Risk-classified implementation orchestrator, six tiered subagents, and the disciplines around them: alignment interview, an independent second opinion on the approach, bug diagnosis, three-axis review, on-demand adversarial testing, private per-project overlay and glossary.",
+      "description": "Risk-classified implementation orchestrator, eight tiered subagents, and the disciplines around them: alignment interview, an independent second opinion on the approach, bug diagnosis, three-axis review, on-demand adversarial testing and security audit, private per-project overlay and glossary.",
       "category": "engineering",
       "keywords": [
         "implement",
