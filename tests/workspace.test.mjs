@@ -8,8 +8,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { basename, delimiter, join } from 'node:path';
 
 import {
   REPO_ROOT,
@@ -20,7 +20,7 @@ import {
   envNoRepoAbove,
   writeOverlay,
 } from './helpers.mjs';
-import { locateRepo } from '../hooks/lib/repo.mjs';
+import { canonical, locateRepo } from '../hooks/lib/repo.mjs';
 
 const CLI = join(REPO_ROOT, 'bin', 'workspace.mjs');
 
@@ -52,10 +52,12 @@ function world(boundary, config) {
   return { home, main, pool: join(boundary, 'main-worktrees'), env };
 }
 
+// Bound to `main` unless the config says otherwise; `main: undefined` writes a config from
+// before the binding.
 function writePool(home, main, config) {
   const dir = join(home, '.claude', 'context', basename(main));
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'workspace.json'), JSON.stringify(config));
+  writeFileSync(join(dir, 'workspace.json'), JSON.stringify({ main: canonical(main), ...config }));
 }
 
 function slot(w, args, cwd = w.main, { env = {}, input } = {}) {
@@ -297,6 +299,46 @@ test('a pool in .claude/worktrees is hidden from the main tree through the local
     slot(w, ['take', 'feat/b']);
     const exclude = readFileSync(join(w.main, '.git', 'info', 'exclude'), 'utf8');
     assert.equal(exclude.match(/\.claude\/worktrees/g).length, 1, 'the exclude entry is added once');
+  });
+});
+
+test('a pool inside the tree that passes through a link is refused, however the pool is spelled', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary);
+    // A junction stands in for a tracked symlink: Windows hands those out only with a
+    // privilege, and both resolve the same way.
+    mkdirSync(join(w.main, '.claude'));
+    symlinkSync(join(w.main, 'apps'), join(w.main, '.claude', 'worktrees'), 'junction');
+    // The user's own alias of the checkout — a symlinked ~/code, a subst drive.
+    const alias = join(boundary, 'alias');
+    symlinkSync(w.main, alias, 'junction');
+    const exclude = join(w.main, '.git', 'info', 'exclude');
+    const before = existsSync(exclude) ? readFileSync(exclude, 'utf8') : '';
+
+    for (const pool of ['.claude/worktrees', join(alias, '.claude', 'worktrees'), '../alias/.claude/worktrees']) {
+      writePool(w.home, w.main, { base: 'origin/main', pool });
+      const refused = slot(w, ['take', 'feat/a']);
+      assert.equal(refused.status, 2, `${pool}: ${refused.stderr}`);
+      assert.match(refused.stderr, /passes through \.claude[\\/]worktrees, which is a link/);
+    }
+    assert.ok(!existsSync(join(w.main, 'apps', 'slot-1')), 'no slot where the link points');
+    assert.equal(existsSync(exclude) ? readFileSync(exclude, 'utf8') : '', before, 'nothing hidden from git status');
+  });
+});
+
+test('prepare steps never run a command the branch put in the slot folder', { skip: process.platform !== 'win32' }, () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const marker = join(boundary, 'shim-ran.log');
+    const w = world(boundary, { prepare: [{ run: 'claudius-probe-tool --version' }] });
+    // As in the user's own terminal; Claude Code's tools set this variable themselves.
+    for (const key of Object.keys(w.env)) if (key.toLowerCase() === 'nodefaultcurrentdirectoryinexepath') delete w.env[key];
+    writeFileSync(join(w.main, 'claudius-probe-tool.cmd'), `@echo shim> "${marker}"\r\n`);
+    git(w.main, 'add', '.');
+    git(w.main, 'commit', '-qm', 'a tool of the branch');
+    git(w.main, 'push', '-q', 'origin', 'HEAD:main');
+
+    slot(w, ['take', 'feat/a']);
+    assert.ok(!existsSync(marker), 'the tracked claudius-probe-tool.cmd must not run');
   });
 });
 
@@ -730,5 +772,207 @@ test('slots are recognised when the repository is reached through a short 8.3 pa
     assert.match(second.stderr, /All 1 slots are claimed/);
 
     assert.equal(slot(w, ['release', 'slot-1'], viaShort).status, 0);
+  });
+});
+
+// --- a config belongs to one repository ----------------------------------------
+
+// The overlay folder is named after the main tree's basename, and a cloned repository picks
+// its own name — so "main" in the config, not the folder, decides whose config it is.
+function namesake(boundary) {
+  const other = join(boundary, 'clones', 'main');
+  mkdirSync(join(boundary, 'clones'));
+  git(join(boundary, 'clones'), 'init', '-q', '-b', 'main', 'main');
+  writeFileSync(join(other, 'package.json'), '{}\n');
+  mkdirSync(join(other, 'apps'));
+  writeFileSync(join(other, 'apps', 'a.js'), '1\n');
+  git(other, 'add', '.');
+  git(other, 'commit', '-qm', 'theirs');
+  return other;
+}
+
+test('a repository that only shares the folder name never runs another repository\'s config', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const marker = join(boundary, 'prepared.log').replaceAll('\\', '/');
+    const w = world(boundary, {
+      protect: ['apps/'],
+      prepare: [{ run: `node -e "require('fs').appendFileSync('${marker}','x')"` }],
+    });
+    const other = namesake(boundary);
+
+    const refused = slot(w, ['take', 'feat/x'], other);
+    assert.equal(refused.status, 2);
+    assert.match(refused.stderr, /belongs to .*not to this repository/);
+    assert.ok(!existsSync(marker), 'no prepare step may run');
+    assert.ok(!existsSync(join(boundary, 'clones', 'main-worktrees')));
+
+    assert.equal(denial(runHook('guard-main-tree.mjs', edit(join(other, 'apps', 'a.js')), { env: w.env })), null);
+    assert.equal(runHook('workspace-notice.mjs', { cwd: other }, { env: w.env }).stdout, '');
+
+    // The owner is unaffected.
+    assert.equal(slot(w, ['take', 'feat/x']).status, 0);
+    assert.equal(readFileSync(marker, 'utf8'), 'x');
+  });
+});
+
+test('a config from before the binding is ignored, and the line it asks for binds it', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, { main: undefined, base: 'origin/main', protect: ['apps/'] });
+    const line = `"main": ${JSON.stringify(canonical(w.main))}`;
+
+    const refused = slot(w, ['take', 'feat/x']);
+    assert.equal(refused.status, 2);
+    assert.ok(refused.stderr.includes(line), refused.stderr);
+    assert.ok(!existsSync(w.pool));
+
+    assert.equal(denial(runHook('guard-main-tree.mjs', edit(join(w.main, 'apps', 'a.js')), { env: w.env })), null);
+    const notice = runHook('workspace-notice.mjs', { cwd: w.main }, { env: w.env });
+    assert.ok(notice.stdout.includes(line), notice.stdout);
+
+    // Exactly what the message says to add, pasted into the file by hand.
+    writeFileSync(configFile(w), readFileSync(configFile(w), 'utf8').replace('{', `{${line},`));
+    assert.equal(slot(w, ['take', 'feat/x']).status, 0);
+    assert.notEqual(denial(runHook('guard-main-tree.mjs', edit(join(w.main, 'apps', 'a.js')), { env: w.env })), null);
+  });
+});
+
+test('a config whose repository moved away says how to bind it to the new place', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, { main: join(boundary, 'moved-from', 'main') });
+    const refused = slot(w, ['status']);
+    assert.equal(refused.status, 2);
+    assert.match(refused.stderr, /no longer exists/);
+    assert.ok(refused.stderr.includes(`"main": ${JSON.stringify(canonical(w.main))}`), refused.stderr);
+  });
+});
+
+test('init binds the config it writes to this repository', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary);
+    assert.equal(slot(w, ['init']).status, 0);
+    assert.equal(JSON.parse(readFileSync(configFile(w), 'utf8')).main, canonical(w.main));
+    assert.equal(slot(w, ['take', 'feat/x']).status, 0);
+  });
+});
+
+// --- sweep ----------------------------------------------------------------------
+
+// gh is spawned without a shell, so its stand-in must be an executable named gh: a copy of
+// node with a preload on Windows, where only gh.exe is found, and a script elsewhere.
+function fakeGh(dir, env, prs) {
+  const bin = join(dir, 'fake-bin');
+  mkdirSync(bin);
+  const json = join(dir, 'prs.json');
+  writeFileSync(json, JSON.stringify(prs));
+  const pathKey = Object.keys(env).find((key) => key.toUpperCase() === 'PATH') ?? 'PATH';
+  const path = { [pathKey]: `${bin}${delimiter}${env[pathKey] ?? ''}` };
+  if (process.platform !== 'win32') {
+    writeFileSync(join(bin, 'gh'), `#!/bin/sh\ncat '${json}'\n`, { mode: 0o755 });
+    return path;
+  }
+  copyFileSync(process.execPath, join(bin, 'gh.exe'));
+  const preload = join(dir, 'fake-gh.cjs').replaceAll('\\', '/');
+  writeFileSync(preload, [
+    "if (require('path').basename(process.execPath).toLowerCase() === 'gh.exe') {",
+    `  process.stdout.write(require('fs').readFileSync(${JSON.stringify(json)}, 'utf8'));`,
+    '  process.exit(0);',
+    '}',
+    '',
+  ].join('\n'));
+  return { ...path, NODE_OPTIONS: `--require "${preload}"` };
+}
+
+test('sweep removes only what a merged pull request of this repository actually contained', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, {});
+    const worktree = (branch) => {
+      const path = join(boundary, branch.replace('/', '-'));
+      git(w.main, 'worktree', 'add', '-q', '-b', branch, path, 'origin/main');
+      writeFileSync(join(path, `${basename(path)}.txt`), branch);
+      git(path, 'add', '.');
+      git(path, 'commit', '-qm', branch);
+      git(path, 'push', '-q', 'origin', branch);
+      writeFileSync(join(path, '.env.local'), 'SECRET=1\n'); // ignored, so invisible to the safety check
+      return path;
+    };
+    const fork = worktree('develop');
+    const done = worktree('feat/done');
+    const reused = worktree('feat/reused');
+    const reusedHead = git(reused, 'rev-parse', 'HEAD');
+    writeFileSync(join(reused, 'more.txt'), 'after the merge');
+    git(reused, 'add', '.');
+    git(reused, 'commit', '-qm', 'after the merge');
+    git(reused, 'push', '-q', 'origin', 'feat/reused');
+    // The PR head is one commit past the local branch — merged on GitHub after a review fix.
+    const behind = worktree('feat/behind');
+    writeFileSync(join(behind, 'review.txt'), 'fixed in review');
+    git(behind, 'add', '.');
+    git(behind, 'commit', '-qm', 'review fix');
+    git(behind, 'push', '-q', 'origin', 'feat/behind');
+    const behindHead = git(behind, 'rev-parse', 'HEAD');
+    git(behind, 'reset', '-q', '--hard', 'HEAD~1');
+    const unfetched = worktree('feat/unfetched');
+
+    const gh = fakeGh(boundary, w.env, [
+      { headRefName: 'develop', headRefOid: git(fork, 'rev-parse', 'HEAD'), isCrossRepository: true, number: 7, state: 'MERGED' },
+      { headRefName: 'feat/done', headRefOid: git(done, 'rev-parse', 'HEAD'), isCrossRepository: false, number: 8, state: 'MERGED' },
+      { headRefName: 'feat/reused', headRefOid: reusedHead, isCrossRepository: false, number: 9, state: 'MERGED' },
+      { headRefName: 'feat/behind', headRefOid: behindHead, isCrossRepository: false, number: 10, state: 'MERGED' },
+      { headRefName: 'feat/unfetched', headRefOid: '1'.repeat(40), isCrossRepository: false, number: 11, state: 'MERGED' },
+    ]);
+    const result = slot(w, ['sweep', '--yes'], w.main, { env: gh });
+    assert.equal(result.status, 0, result.stderr);
+
+    assert.ok(!existsSync(done), 'the merged branch of this repository is swept');
+    assert.ok(existsSync(join(fork, '.env.local')), 'a fork\'s pull request says nothing about a local branch');
+    assert.ok(existsSync(join(reused, '.env.local')), 'commits after the merge keep the worktree');
+    assert.match(result.stderr, /SKIP .*feat\/reused.*did not contain/);
+    assert.ok(!existsSync(behind), 'a branch the PR head contains is swept too');
+    assert.ok(existsSync(join(unfetched, '.env.local')), 'a head this clone does not have covers nothing');
+    assert.match(result.stderr, /SKIP .*feat\/unfetched.*git fetch origin/);
+    const branches = git(w.main, 'branch', '--format=%(refname:short)').split(/\r?\n/);
+    assert.ok(!branches.includes('feat/done') && !branches.includes('feat/behind'));
+    assert.ok(['develop', 'feat/reused', 'feat/unfetched'].every((branch) => branches.includes(branch)));
+  });
+});
+
+// --- copy ---------------------------------------------------------------------------
+
+test('copy never follows a folder link in the slot out of it', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, { copy: ['cfg/.env.local'], keep: ['cfg'] });
+    mkdirSync(join(w.main, 'cfg'));
+    writeFileSync(join(w.main, 'cfg', '.env.local'), 'SECRET=1\n');
+    // Shared by every worktree, so the link below leaves the slot clean enough to release.
+    writeFileSync(join(w.main, '.git', 'info', 'exclude'), 'cfg\n');
+
+    const path = lastLine(slot(w, ['take', 'feat/a']).stdout);
+    const outside = join(boundary, 'outside');
+    mkdirSync(outside);
+    symlinkSync(outside, join(path, 'cfg'), 'junction');
+    assert.equal(slot(w, ['release'], path).status, 0);
+
+    const again = slot(w, ['take', 'feat/b']);
+    assert.equal(again.status, 0, again.stderr);
+    assert.equal(lastLine(again.stdout), path);
+    assert.ok(!existsSync(join(outside, '.env.local')), 'the secret must not land outside the slot');
+    assert.match(again.stderr, /skipped cfg[\\/]\.env\.local/);
+  });
+});
+
+test('copy never writes through a target that is itself a link, even a dangling one', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, { copy: ['.env.local'], keep: ['.env.local'] });
+    writeFileSync(join(w.main, '.env.local'), 'SECRET=1\n');
+    const path = lastLine(slot(w, ['take', 'feat/a']).stdout);
+    rmSync(join(path, '.env.local'));
+    const outside = join(boundary, 'outside');
+    mkdirSync(outside);
+    // A junction stands in for a file link: Windows hands those out only with a privilege.
+    symlinkSync(join(outside, 'gone'), join(path, '.env.local'), 'junction');
+    assert.equal(slot(w, ['release'], path).status, 0);
+
+    assert.equal(slot(w, ['take', 'feat/b']).status, 0);
+    assert.ok(!existsSync(join(outside, 'gone')), 'nothing may be created where the link points');
   });
 });

@@ -111,7 +111,7 @@ node bin/workspace.mjs                    # status, with pull requests
 node bin/workspace.mjs sweep [--yes]      # free / remove what has merged or been abandoned
 ```
 
-Everything project-specific — mode, folders, base branch, protected paths and branches, what survives between tasks, which files to copy and which install steps to run when a lockfile changes — lives in the private `workspace.json`, so the repository itself gains nothing.
+Everything project-specific — mode, folders, base branch, protected paths and branches, what survives between tasks, which files to copy and which install steps to run when a lockfile changes — lives in the private `workspace.json`, so the repository itself gains nothing. The config names the main tree it belongs to (`"main"`), because its folder is named only after the repository's: a cloned repository with the same folder name is refused rather than handed your `prepare` steps. An older config without `"main"` and is ignored until you add it — the session notice says exactly what to add.
 
 **Opt-in, never imposed.** Without a `workspace.json` nothing changes: the hooks stay silent, the CLI refuses to act and the skill does not suggest itself, so a repository with its own worktree scripts or branch habits keeps them. `node bin/workspace.mjs init` proposes a config from the repository — base branch, where existing worktrees already live, code folders, caches, env files, the install step — with the reason for each value, and writes it only when asked (`--dry-run` to look first). `mode off` pauses a configured repository without deleting anything; `CLAUDIUS_WORKSPACE=off` switches the feature off everywhere.
 

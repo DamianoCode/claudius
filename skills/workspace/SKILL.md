@@ -49,8 +49,9 @@ Only when the user asks. The config lives in the private overlay, never in the w
 
 The fields, for editing by hand:
 
+- `main` — the main tree this config belongs to, written by `init`. The overlay folder is named only after the repository's folder name, so a config without `main`, or naming another repository, is ignored: a cloned repository that shares the name must never run this one's `prepare` steps. Add it by hand to a config from before it existed — only for the repository the config was made for.
 - `mode` — `worktrees` (default), `branches` or `off`.
-- `pool` — the folder slots live in, relative to the main tree; `../<repo>-worktrees` when absent. `.claude/worktrees` removes the approval prompt on entry and allows jumping between slots, at the price of slots inside the repository and paths about 26 characters longer.
+- `pool` — the folder slots live in, relative to the main tree; `../<repo>-worktrees` when absent. `.claude/worktrees` removes the approval prompt on entry and allows jumping between slots, at the price of slots inside the repository and paths about 26 characters longer. A pool inside the repository is refused when any folder on its path is a link, since the checked-out branch decides where a link leads.
 - `prefix` — slot folders are named `<prefix>-1`, `<prefix>-2`, …; `slot` when absent.
 - `size` — how many sessions really run at once. Each slot holds a full dependency tree.
 - `base` — a ref, or a glob such as `origin/release/*` for the newest matching branch.
@@ -58,6 +59,6 @@ The fields, for editing by hand:
 - `protectedBranches` — branch mode only: globs never edited directly. Defaults to the base without its remote, plus `main` and `master`.
 - `keep` — `git clean -e` patterns that survive between tasks in a slot: whatever is slow to rebuild.
 - `copy` — untracked files a checkout cannot recreate, copied from the main tree into a slot's gaps (after `prepare` as well, so a build directory inside dependencies can be seeded).
-- `prepare` — shell lines run after every switch, in both modes. With `when` (paths or `*` globs, e.g. `libs/*/prisma/schema/*.prisma`), only when those files changed since the step last ran there; keep unconditional steps cheap and cache-backed.
+- `prepare` — shell lines run after every switch, in both modes. On Windows a bare command name is never looked up in the slot folder, where the taken branch could have put a file of that name: a wrapper the repository ships is written `.\gradlew build`, not `gradlew build`. With `when` (paths or `*` globs, e.g. `libs/*/prisma/schema/*.prisma`), only when those files changed since the step last ran there; keep unconditional steps cheap and cache-backed.
 
 A pool inside the repository is added to `.git/info/exclude` automatically. Tools that walk the tree without reading git's ignore rules need their own ignore entry for it — check the build system (Nx reads `.nxignore`, for instance) and tell the user if one is missing rather than editing a tracked file. On Windows, measure the deepest dependency path in a slot; past 260 characters, tell the user that enabling `LongPathsEnabled` removes the limit.
