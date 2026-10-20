@@ -51,6 +51,7 @@ const CONTRACTS = {
   'test-runner': checkTestRunner,
   'code-reviewer': checkReviewer,
   skeptic: checkSkeptic,
+  breaker: checkBreaker,
 };
 
 main();
@@ -245,4 +246,11 @@ function checkReviewer(finalText) {
 function checkSkeptic(finalText) {
   if (has(finalText, /(?:^|\n)\s*VERDICT\s*:\s*(?:PROCEED|CHANGE|STOP)\b/i)) return '';
   return 'The second opinion is incomplete. Continue in the same context and return the required `VERDICT: PROCEED|CHANGE|STOP` report with STRONGEST OBJECTION / CHEAPER ALTERNATIVE / COST / HOLDS IF. Do not invent an objection to fill it, and do not perform implementation.';
+}
+
+// Only the report is checked. Whether the breaker wrote outside its probe directory is
+// for the caller to see in git status, not for a hook to guess from shell commands.
+function checkBreaker(finalText) {
+  if (has(finalText, /(?:^|\n)\s*BREAKER\s*:\s*(?:BROKEN|HELD|BLOCKED)\b/i)) return '';
+  return 'The attack is incomplete. Continue in the same context, stop anything you left running, and return the required `BREAKER: BROKEN|HELD|BLOCKED` report with BREAKS / ATTEMPTED / UNPROVEN / ASSUMED. Report only breaks you ran and saw fail; `HELD` is a valid result. Do not edit the repository.';
 }
