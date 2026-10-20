@@ -1,6 +1,6 @@
 ---
 name: break
-description: Attack one important feature or module to find where it fails — hostile input, boundaries, ordering, concurrency, failing dependencies — with one `breaker` agent that reports only what it made fail. Use when the user says "break this", "try to break", "popsuj to", "przetestuj na ostro", "znajdź dziurę". Not a step of implement, not a substitute for review, and not a security audit.
+description: Attack one important feature or module to find where it fails — hostile input, boundaries, ordering, concurrency, failing dependencies — with one `breaker` agent that reports only what it made fail. Use when the user says "break this", "try to break", "popsuj to", "przetestuj na ostro", "znajdź dziurę". Not a step of implement, not a substitute for review, and not a security audit — that is `/claudius:security-audit`.
 disable-model-invocation: true
 argument-hint: "[feature or module]"
 ---

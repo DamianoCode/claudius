@@ -14,33 +14,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { REPO_ROOT } from './helpers.mjs';
+import { REPO_ROOT, bulletsUnder } from './helpers.mjs';
 
 const CANONICAL = join(REPO_ROOT, 'skills', 'implement', 'QUALITY.md');
 const AGENT = join(REPO_ROOT, 'agents', 'clean-code-engineer.md');
 
 function read(path) {
   return readFileSync(path, 'utf8');
-}
-
-// Bullets under a heading, up to the next heading. Trailing commas and full stops differ
-// between a list that ends its items and one that runs them on, so normalise those away
-// and compare what the rule actually says.
-function bulletsUnder(source, heading, stopAt) {
-  const start = source.indexOf(heading);
-  assert.notEqual(start, -1, `heading not found: ${heading}`);
-  const rest = source.slice(start + heading.length);
-
-  // A section ends at the next heading, or earlier at an explicit marker — the agent file
-  // keeps its TypeScript list inside the same numbered section rather than under its own
-  // heading, and the two lists must not be compared as one.
-  const stops = [rest.search(/\n#{1,6} /), stopAt ? rest.indexOf(stopAt) : -1].filter((i) => i !== -1);
-  const section = stops.length === 0 ? rest : rest.slice(0, Math.min(...stops));
-
-  return section
-    .split('\n')
-    .filter((line) => line.startsWith('- '))
-    .map((line) => line.slice(2).trim().replace(/[.,]$/, ''));
 }
 
 test('the quality rules in the agent match the canonical list exactly', () => {

@@ -52,6 +52,8 @@ const CONTRACTS = {
   'code-reviewer': checkReviewer,
   skeptic: checkSkeptic,
   breaker: checkBreaker,
+  'security-auditor': checkAuditor,
+  'security-verifier': checkVerifier,
 };
 
 main();
@@ -253,4 +255,14 @@ function checkSkeptic(finalText) {
 function checkBreaker(finalText) {
   if (has(finalText, /(?:^|\n)\s*BREAKER\s*:\s*(?:BROKEN|HELD|BLOCKED)\b/i)) return '';
   return 'The attack is incomplete. Continue in the same context, stop anything you left running, and return the required `BREAKER: BROKEN|HELD|BLOCKED` report with BREAKS / ATTEMPTED / UNPROVEN / ASSUMED. Report only breaks you ran and saw fail; `HELD` is a valid result. Do not edit the repository.';
+}
+
+function checkAuditor(finalText) {
+  if (has(finalText, /(?:^|\n)\s*AUDIT\s*:\s*(?:FINDINGS|NONE FOUND|BLOCKED)\b/i)) return '';
+  return 'The audit is incomplete. Continue in the same context and return the required `AUDIT: FINDINGS|NONE FOUND|BLOCKED` report with FINDINGS / NEEDS VALIDATION / HARDENING / COVERAGE / CHECKED AND DISMISSED. Report only findings with a full trace; `NONE FOUND` is a valid result. Never include a secret value, and do not edit the repository.';
+}
+
+function checkVerifier(finalText) {
+  if (has(finalText, /(?:^|\n)\s*VERIFY\s*:\s*(?:CONFIRMED|NEEDS VALIDATION|REJECTED)\b/i)) return '';
+  return 'The verification is incomplete. Continue in the same context and return the required `VERIFY: CONFIRMED|NEEDS VALIDATION|REJECTED` report with SEVERITY / TRACE / CONTROL / PROBE / MISSING FACT / REASON. Do not edit the repository.';
 }

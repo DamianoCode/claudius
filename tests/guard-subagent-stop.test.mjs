@@ -189,6 +189,66 @@ test('does not accept a breaker result outside the three the caller acts on', ()
   assert.match(stopContinuation(result), /BREAKER/);
 });
 
+// --- security-auditor contract ---
+
+test('sends back a security-auditor whose final message lacks AUDIT:', () => {
+  const result = runHook(HOOK, {
+    hook_event_name: 'SubagentStop',
+    agent_type: 'claudius:security-auditor',
+    last_assistant_message: 'The export route looks exposed.\n\nFINDINGS:\n- [HIGH] cross-tenant export',
+  });
+  assert.match(stopContinuation(result), /AUDIT/);
+});
+
+test('lets a security-auditor that found nothing stop', () => {
+  // NONE FOUND is a complete answer. A guard that demanded a finding would push the
+  // auditor into reporting checklist items as vulnerabilities.
+  const result = runHook(HOOK, {
+    hook_event_name: 'SubagentStop',
+    agent_type: 'claudius:security-auditor',
+    last_assistant_message: 'AUDIT: NONE FOUND\n\nFINDINGS: none\nCOVERAGE:\n- /api/orders × access control — covered',
+  });
+  assert.equal(stopContinuation(result), '');
+});
+
+test('does not accept an audit result outside the three the skill acts on', () => {
+  const result = runHook(HOOK, {
+    hook_event_name: 'SubagentStop',
+    agent_type: 'claudius:security-auditor',
+    last_assistant_message: 'AUDIT: NONE\n\nFINDINGS: none',
+  });
+  assert.match(stopContinuation(result), /AUDIT/);
+});
+
+// --- security-verifier contract ---
+
+test('sends back a security-verifier whose final message lacks VERIFY:', () => {
+  const result = runHook(HOOK, {
+    hook_event_name: 'SubagentStop',
+    agent_type: 'claudius:security-verifier',
+    last_assistant_message: 'The trace holds, the tenant filter is missing on the bulk path.',
+  });
+  assert.match(stopContinuation(result), /VERIFY/);
+});
+
+test('lets a security-verifier that could not settle the claim from source stop', () => {
+  const result = runHook(HOOK, {
+    hook_event_name: 'SubagentStop',
+    agent_type: 'claudius:security-verifier',
+    last_assistant_message: 'VERIFY: NEEDS VALIDATION\n\nSEVERITY: none\nMISSING FACT: proxy strips the header',
+  });
+  assert.equal(stopContinuation(result), '');
+});
+
+test('does not accept a verification result outside the three the skill acts on', () => {
+  const result = runHook(HOOK, {
+    hook_event_name: 'SubagentStop',
+    agent_type: 'claudius:security-verifier',
+    last_assistant_message: 'VERIFY: LIKELY\n\nREASON: probably real',
+  });
+  assert.match(stopContinuation(result), /VERIFY/);
+});
+
 // --- clean-code-engineer contract ---
 
 test('lets a clean-code-engineer that reports NO_CHANGE: with no edits at all stop', () => {
