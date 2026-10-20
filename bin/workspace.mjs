@@ -29,6 +29,8 @@
 //
 //   ~/.claude/context/<repo>/workspace.json
 //   {
+//     "main": "/path/to/my-repo",       the main tree this config belongs to — the folder above
+//                                       is named only after its basename, which a clone chooses
 //     "mode": "worktrees",              or "branches", or "off"; switch with `workspace.mjs mode <m>`
 //     "pool": "../my-repo-worktrees",   where slots live, relative to the main tree (this is the default)
 //     "prefix": "slot",                 slot folders are <prefix>-1, <prefix>-2, …
@@ -68,12 +70,15 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
-  appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync,
+  appendFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync,
+  writeFileSync,
 } from 'node:fs';
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path';
 
 import { canonical, locateRepo } from '../hooks/lib/repo.mjs';
-import { MODES, configPath as workspaceConfigPath, disabledEverywhere } from '../hooks/lib/workspace.mjs';
+import {
+  MODES, bindingLine, configBinding, configPath as workspaceConfigPath, disabledEverywhere,
+} from '../hooks/lib/workspace.mjs';
 import { detectConfig } from './lib/detect.mjs';
 
 const log = (...parts) => console.error(...parts);
@@ -95,8 +100,14 @@ function gitOk(cwd, ...args) {
 
 // Prepare steps are shell lines from the user's own config; stdout is discarded so the
 // last line of `take` stays the slot path.
+//
+// The line is the user's, but the folder it runs in holds whatever branch was taken, and
+// cmd.exe looks for a command there before PATH: a tracked go.cmd would run in place of go.
+// NoDefaultCurrentDirectoryInExePath turns that lookup off, for the steps and their children.
+const SHELL_ENV = process.platform === 'win32' ? { ...process.env, NoDefaultCurrentDirectoryInExePath: '1' } : process.env;
+
 function shell(cwd, line) {
-  const result = spawnSync(line, { cwd, shell: true, stdio: ['ignore', 'ignore', 'inherit'] });
+  const result = spawnSync(line, { cwd, env: SHELL_ENV, shell: true, stdio: ['ignore', 'ignore', 'inherit'] });
   if (result.status !== 0) throw new Error(`prepare step failed (${result.status}): ${line}`);
 }
 
@@ -111,6 +122,39 @@ function processAlive(pid) {
 
 // --- repository and config --------------------------------------------------
 
+// A pool inside the main tree sits on paths the checked-out branch can track as symlinks.
+// Followed, such a link would decide where slots are created, which folder the local
+// exclude hides from `git status` — and so what the next clean deletes unseen — and where
+// copied secrets land. Returns the first linked component, relative to the tree, or null.
+//
+// Whether a step is inside the tree is decided by where it really leads, not by how the
+// pool is spelled: an absolute pool written through the user's own alias of the checkout,
+// or in 8.3 form, names the same folders. Above the tree, links are the user's own and are
+// followed; from the tree down, every component is checked.
+function linkInsideTree(main, path) {
+  const { root } = parse(path);
+  let current = canonical(root);
+  let inside = isInsideTree(main, current);
+  for (const segment of path.slice(root.length).split(sep).filter(Boolean)) {
+    const next = join(current, segment);
+    if (!inside) {
+      current = canonical(next);
+      inside = isInsideTree(main, current);
+      continue;
+    }
+    const stat = lstatSync(next, { throwIfNoEntry: false });
+    if (!stat) return null; // created later, by us, as a plain folder
+    if (stat.isSymbolicLink()) return relative(main, next);
+    current = next;
+  }
+  return null;
+}
+
+function isInsideTree(main, path) {
+  const rel = relative(main, path);
+  return !(rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel));
+}
+
 function loadContext(start) {
   if (disabledEverywhere()) throw new Refusal('The workspace feature is switched off (CLAUDIUS_WORKSPACE=off).');
   const repo = locateRepo(start);
@@ -120,6 +164,27 @@ function loadContext(start) {
     throw new Refusal(`No workspace configured for this repository — it keeps its own workflow. To opt in: workspace.mjs init`);
   }
   const raw = JSON.parse(readFileSync(configPath, 'utf8'));
+  // Prepare steps run shell lines, so a config borrowed through a shared folder name must
+  // never act here — a cloned repository chooses its own name.
+  const binding = configBinding(raw, repo.main);
+  if (binding === 'unbound') {
+    throw new Refusal(
+      `${configPath} does not say which repository it belongs to, so it is ignored. ` +
+        `If it was made for this one (${repo.main}), add ${bindingLine(repo.main)} to it.`,
+    );
+  }
+  if (binding === 'foreign' && !existsSync(raw.main)) {
+    throw new Refusal(
+      `${configPath} belongs to ${raw.main}, which no longer exists, so it is ignored. ` +
+        `If this repository moved from there, change it to ${bindingLine(repo.main)}.`,
+    );
+  }
+  if (binding === 'foreign') {
+    throw new Refusal(
+      `${configPath} belongs to ${raw.main}, not to this repository (${repo.main}) — they only share a folder name. ` +
+        'This repository has no workspace, and two repositories with the same folder name cannot both have one.',
+    );
+  }
   if (raw.mode !== undefined && !MODES.includes(raw.mode)) {
     throw new Refusal(`Unknown mode "${raw.mode}" in ${configPath}. Use ${MODES.join(' or ')}.`);
   }
@@ -127,7 +192,15 @@ function loadContext(start) {
   if (!/^[A-Za-z0-9._]+(?:-[A-Za-z0-9._]+)*$/.test(prefix)) {
     throw new Refusal(`"prefix" must be a plain folder name (letters, digits, dots, dashes), got "${prefix}".`);
   }
-  const pool = canonical(resolve(repo.main, raw.pool ?? `../${basename(repo.main)}-worktrees`));
+  const lexicalPool = resolve(repo.main, raw.pool ?? `../${basename(repo.main)}-worktrees`);
+  const linked = linkInsideTree(repo.main, lexicalPool);
+  if (linked) {
+    throw new Refusal(
+      `"pool" ${raw.pool ?? lexicalPool} passes through ${linked}, which is a link — the checked-out branch decides where it leads. ` +
+        `Use a pool outside the repository, or make ${linked} a plain folder.`,
+    );
+  }
+  const pool = canonical(lexicalPool);
   return {
     configPath,
     raw,
@@ -313,12 +386,23 @@ function expand(root, pattern) {
 // Untracked files a checkout cannot recreate. Only fills gaps: a slot's own copy wins.
 // The parent must already exist in the slot, so a build directory inside dependencies is
 // copied after the install that creates its parent, never into a half-made tree.
+//
+// The slot holds whatever branch was taken, and a branch can track a folder as a symlink.
+// Copying through it would put the user's untracked files — usually secrets — wherever the
+// branch's author pointed, so the parent must resolve to a folder inside the slot, and a
+// target that is itself a link, even a dangling one, is left alone.
 function copyMissing(ctx, slotPath) {
   if (slotPath === ctx.main) return; // branch mode: the main tree is the source
+  const slotRoot = realpathSync(slotPath);
   for (const pattern of ctx.copy) {
     for (const rel of expand(ctx.main, pattern)) {
       const target = join(slotPath, rel);
-      if (existsSync(target) || !existsSync(dirname(target))) continue;
+      if (lstatSync(target, { throwIfNoEntry: false }) || !existsSync(dirname(target))) continue;
+      const inSlot = relative(slotRoot, realpathSync(dirname(target)));
+      if (inSlot.startsWith('..') || isAbsolute(inSlot)) {
+        log(`  skipped ${rel} — its folder in this slot leads outside it`);
+        continue;
+      }
       cpSync(join(ctx.main, rel), target, { recursive: true });
       log(`  copied ${rel}`);
     }
@@ -511,8 +595,12 @@ function removeWorktree(ctx, path) {
 
 // One GitHub query for every branch instead of one per worktree. Without gh the PR
 // column stays empty and sweep does nothing, which is the safe failure.
+//
+// A pull request from a fork names a branch in the fork, chosen by whoever opened it, so
+// only pull requests from this repository can speak for a local branch of the same name.
 function pullRequestsByBranch(ctx) {
-  const result = spawnSync('gh', ['pr', 'list', '--state', 'all', '--limit', '300', '--json', 'headRefName,number,state'], {
+  const fields = 'headRefName,headRefOid,isCrossRepository,number,state';
+  const result = spawnSync('gh', ['pr', 'list', '--state', 'all', '--limit', '300', '--json', fields], {
     cwd: ctx.main, encoding: 'utf8',
   });
   if (result.status !== 0) {
@@ -520,8 +608,24 @@ function pullRequestsByBranch(ctx) {
     return new Map();
   }
   const byBranch = new Map();
-  for (const pr of JSON.parse(result.stdout)) if (!byBranch.has(pr.headRefName)) byBranch.set(pr.headRefName, pr);
+  for (const pr of JSON.parse(result.stdout)) {
+    if (pr.isCrossRepository || byBranch.has(pr.headRefName)) continue;
+    byBranch.set(pr.headRefName, pr);
+  }
   return byBranch;
+}
+
+// A merged pull request covers a local branch only when everything on the branch was in
+// it: the branch tip is the head the PR merged, or an ancestor of it. A branch name can be
+// reused after a merge, and its new commits are not upstream just because the old PR was.
+// A head this clone never fetched cannot be checked, so it covers nothing.
+//
+// 'covers' | 'diverged' | 'unfetched'
+function mergedCoverage(ctx, pr, branch) {
+  if (typeof pr.headRefOid !== 'string' || !gitOk(ctx.main, 'cat-file', '-e', `${pr.headRefOid}^{commit}`)) {
+    return 'unfetched';
+  }
+  return gitOk(ctx.main, 'merge-base', '--is-ancestor', `refs/heads/${branch}`, pr.headRefOid) ? 'covers' : 'diverged';
 }
 
 // --- branch mode ------------------------------------------------------------
@@ -626,10 +730,18 @@ function sweep(ctx, { yes = false } = {}) {
 
     if (slot && !claim) continue;
     if (!slot && wt.locked) continue; // someone's live session — Claude Code locks those
-    if (pr?.state !== 'MERGED' && !orphaned) continue;
+    const coverage = pr?.state === 'MERGED' ? mergedCoverage(ctx, pr, wt.branch) : null;
+    const merged = coverage === 'covers';
+    if (coverage && !merged && !orphaned) {
+      log(coverage === 'unfetched'
+        ? `SKIP ${name} (${wt.branch}, PR ${pr.number} merged): its head is not in this clone — git fetch origin, then sweep again.`
+        : `SKIP ${name} (${wt.branch}, PR ${pr.number} merged): the branch has commits that PR did not contain — check by hand.`);
+      continue;
+    }
+    if (!merged && !orphaned) continue;
 
     const reason = unsafeReason(wt.path);
-    const why = pr?.state === 'MERGED' ? `PR ${pr.number} merged` : 'its session has ended';
+    const why = merged ? `PR ${pr.number} merged` : 'its session has ended';
     if (reason) {
       log(`SKIP ${name} (${wt.branch ?? 'detached'}, ${why}): ${reason} — check by hand.`);
       continue;
@@ -641,7 +753,7 @@ function sweep(ctx, { yes = false } = {}) {
       if (slot) freeSlot(ctx, { ...wt, name });
       else removeWorktree(ctx, wt.path);
       // Squash merges leave the branch "unmerged" to git although its content is upstream.
-      if (wt.branch && pr?.state === 'MERGED') git(ctx.main, 'branch', '-D', wt.branch);
+      if (merged) git(ctx.main, 'branch', '-D', wt.branch);
     } catch (error) {
       log(`FAILED ${name}: ${error.message.split('\n').pop()}`);
     }
@@ -688,7 +800,7 @@ function init(start, opts) {
 
   for (const [key, why] of Object.entries(reasons)) if (key in config) log(`  ${key.padEnd(8)} ${why}`);
   for (const hint of hints) log(`  hint     ${hint}`);
-  const text = `${JSON.stringify(config, null, 2)}\n`;
+  const text = `${JSON.stringify({ main: repo.main, ...config }, null, 2)}\n`;
   if (opts.dryRun) {
     log(`\nDry run — nothing written. Would create ${path}:`);
   } else {

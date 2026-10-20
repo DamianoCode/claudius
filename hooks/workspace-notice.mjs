@@ -7,7 +7,9 @@ import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 
 import { locateRepo } from './lib/repo.mjs';
-import { currentBranch, readWorkspaceConfig, workspaceCommand } from './lib/workspace.mjs';
+import {
+  bindingLine, configPath, currentBranch, hasUnboundConfig, readWorkspaceConfig, workspaceCommand,
+} from './lib/workspace.mjs';
 
 let cwd = process.cwd();
 try {
@@ -19,7 +21,17 @@ try {
 
 const repo = locateRepo(cwd);
 const config = repo && readWorkspaceConfig(repo.main);
-if (!config) process.exit(0);
+if (!config) {
+  // A config from before the binding is inert, and its owner would otherwise only learn
+  // that from a refused command.
+  if (repo && hasUnboundConfig(repo.main)) {
+    console.log(
+      `[workspace] ${configPath(repo.main)} does not say which repository it belongs to, so it is ignored. ` +
+        `If it was made for this one, add ${bindingLine(repo.main)} to it.`,
+    );
+  }
+  process.exit(0);
+}
 
 const name = basename(repo.main);
 let line;

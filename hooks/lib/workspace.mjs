@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { overlayDir } from './repo.mjs';
+import { canonical, overlayDir } from './repo.mjs';
 
 export const WORKSPACE_CLI = fileURLToPath(new URL('../../bin/workspace.mjs', import.meta.url));
 export const MODES = ['worktrees', 'branches', 'off'];
@@ -18,20 +18,45 @@ export const configPath = (mainTree) => join(overlayDir(mainTree), 'workspace.js
 // or CLAUDIUS_WORKSPACE=off (everywhere) silences it without deleting anything.
 export const disabledEverywhere = () => process.env.CLAUDIUS_WORKSPACE === 'off';
 
-// The parsed workspace.json for a main tree, or null when the feature does not apply:
-// not opted in, switched off, or unreadable — a broken config must never block editing.
-export function readWorkspaceConfig(mainTree) {
+// The overlay folder is named after the main tree's basename, which a cloned repository
+// chooses — so a config only applies to the repository it names in "main". A config without
+// "main" predates the binding and applies to nobody until its owner adds it.
+//
+// 'bound' | 'unbound' (no "main") | 'foreign' (another repository's config)
+export function configBinding(config, mainTree) {
+  if (typeof config?.main !== 'string' || config.main === '') return 'unbound';
+  return canonical(config.main) === mainTree ? 'bound' : 'foreign';
+}
+
+function parseConfig(mainTree) {
   if (disabledEverywhere()) return null;
   const path = configPath(mainTree);
   if (!existsSync(path)) return null;
   try {
-    const config = JSON.parse(readFileSync(path, 'utf8'));
-    const mode = MODES.includes(config.mode) ? config.mode : 'worktrees';
-    return mode === 'off' ? null : { ...config, mode };
+    return JSON.parse(readFileSync(path, 'utf8'));
   } catch {
     return null;
   }
 }
+
+// The parsed workspace.json for a main tree, or null when the feature does not apply:
+// not opted in, switched off, unreadable, or not bound to this repository — a broken or
+// borrowed config must never block editing.
+export function readWorkspaceConfig(mainTree) {
+  const config = parseConfig(mainTree);
+  if (!config || configBinding(config, mainTree) !== 'bound') return null;
+  const mode = MODES.includes(config.mode) ? config.mode : 'worktrees';
+  return mode === 'off' ? null : { ...config, mode };
+}
+
+// True when this repository's config exists but predates the binding to a repository.
+export function hasUnboundConfig(mainTree) {
+  const config = parseConfig(mainTree);
+  return Boolean(config) && config.mode !== 'off' && configBinding(config, mainTree) === 'unbound';
+}
+
+// The line that binds a config to a repository, exactly as it goes into workspace.json.
+export const bindingLine = (mainTree) => `"main": ${JSON.stringify(mainTree)}`;
 
 export function workspaceCommand(args) {
   return `node "${WORKSPACE_CLI}" ${args}`;
