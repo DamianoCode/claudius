@@ -55,7 +55,7 @@ Brief every worker of a parallel wave this way too; when a wave is allowed and h
 
 After workers finish:
 
-1. Read their `ASSUMPTIONS`, `PUBLIC CONTRACT`, `HANDOFF`, verification and risks.
+1. Read their `ASSUMPTIONS`, `PUBLIC CONTRACT`, `SELF-REVIEW`, `HANDOFF`, verification and risks.
 2. Reconcile every assumption against the contract. Never change another layer to match a worker's accidental deviation.
 3. Apply shared and contention-file changes once, yourself.
 4. Inspect the combined diff against `BASE_SHA` before the final checks — **the diff, not the files**. This is where delegation's saving actually lives: a worker's exploration died with its context, and re-opening whole files pulls the equivalent back into this one. Read hunks, and open a whole file only where a hunk genuinely cannot be judged without its surroundings.

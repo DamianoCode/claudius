@@ -49,6 +49,7 @@ For a bug fix, identify the concrete failure path. For a refactor, preserve exte
 - Do not hide real errors with unsafe casts, ignored diagnostics, disabled lint rules, or deleted tests.
 - Validate at system boundaries and enforce authorization/business invariants where the existing architecture expects them.
 - Add or update tests when the behavior is non-trivial and the repository has an established nearby testing pattern, or when tests are explicitly part of the task.
+- A test must be able to fail: assert observable behavior through the public seam, take the expected value from an independent source rather than recomputing it the way the code does, and see it fail once against the missing or broken behavior.
 - Comments explain non-obvious intent/invariants, not what the code visibly does.
 
 When the project uses TypeScript:
@@ -67,7 +68,23 @@ Do not run broad suites just to appear thorough; final/integration verification 
 
 If a check fails because of your code, fix it within scope. If it fails for a pre-existing or outside-scope reason, report the evidence rather than masking it.
 
-## 5. Completion contract
+## 5. Self-review
+
+Passing checks say the code runs, not that it is clean. Once they have a result, read what you actually changed as if a stranger had written it: `git diff -- <your write scope>`, plus every file you created, in full, because `git diff` does not show new files. Not your memory of what you wrote.
+
+- **Trace** — every line you changed traces to the request; anything else of yours comes out, however good an idea it was, and work that was there before you started is never touched.
+- **Reuse** — search for an existing helper, type or pattern before keeping anything new; a second way of doing what the repository already does one way goes.
+- **Simplicity** — an abstraction, parameter, option or file the task does not need gets inlined; if the same behavior fits in clearly less code, write that.
+- **Names** — each new name says what the thing does or holds; a name that will not come honestly means the design is still murky.
+- **Leftovers** — no debug output, commented-out code, stray TODOs, unused imports or parameters, and nothing this change left dead.
+- **Defensive noise** — no `try`/`catch`, null check or fallback for a state that cannot occur inside the system; handling belongs at the boundary, and a real failure stays visible.
+- **Failure paths** — every new branch that can fail does something deliberate; nothing is swallowed, and no message claims what did not happen.
+- **Tests** — each new test could fail, and you saw it fail; a test that passes by construction, or mocks the thing under test, is removed or rewritten.
+- **Comments** — anything that narrates the code or describes this change rather than the code's intent goes.
+
+One pass. Fix what it finds, rerun the affected check, and fill in `SELF-REVIEW` in your report. It is a sweep for the things a writer stops seeing, not a licence to rewrite working code or leave your scope.
+
+## 6. Completion contract
 
 A normal implementation task should end only after an `Edit`/`Write` or after an explicit non-edit outcome:
 
@@ -86,6 +103,7 @@ CHANGED:
 - <path:line> — <what changed and why, anchored on the key symbol>
 
 TESTS: <added/updated or none>
+SELF-REVIEW: <what it fixed, or clean>
 PUBLIC CONTRACT: <surface a caller now depends on, or none>
 HANDOFF: <outside-scope exact changes or none>
 VERIFY:

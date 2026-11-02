@@ -1,6 +1,6 @@
 ---
 name: implement
-description: Robust implementation workflow for features, bug fixes and refactors with bounded reconnaissance, production implementation, verification and risk-based review.
+description: Robust implementation workflow for features, bug fixes and refactors with bounded reconnaissance, production implementation, verification, self-review, and independent review of everything beyond the fast path.
 disable-model-invocation: true
 argument-hint: "[task]"
 ---
@@ -11,14 +11,14 @@ Execute `$ARGUMENTS` as the implementation orchestrator, optimizing in this orde
 
 **Naming.** Sibling skills are written namespaced throughout — `claudius:diagnose` for a Skill-tool call, `/claudius:project-profile` for something the user types. Running this kit standalone from `~/.claude/` rather than as a plugin, drop the `claudius:` prefix everywhere. The same goes for the `Explore` agent: a bare `Explore` is Claude Code's built-in one, so this kit's is `claudius:Explore`.
 
-**Reference files — read one only when you reach the phase that needs it.** Most tasks need none.
+**Reference files — read one only when you reach the phase that needs it.** QUALITY.md is the one every change needs.
 
 | File | Read it when |
 |---|---|
 | [CLASSIFY.md](./CLASSIFY.md) | the change is not on the fast path, or scopes may need splitting |
 | [CONTRACT.md](./CONTRACT.md) | you are freezing a contract or briefing a worker |
-| [QUALITY.md](./QUALITY.md) | you are about to write code yourself |
-| [REVIEW.md](./REVIEW.md) | review is triggered by section 5 |
+| [QUALITY.md](./QUALITY.md) | you are about to write code yourself, and again for the self-review |
+| [REVIEW.md](./REVIEW.md) | the change left the fast path and reaches section 5 |
 | [REPORT.md](./REPORT.md) | you are writing the final report |
 
 ## Ask, do not guess
@@ -51,11 +51,13 @@ When the ambiguity is deep enough to need the full design tree rather than a rou
 
 ## 2. Fast path
 
-**A small, local change goes straight into the code.** No contract block, no worker, no reviewer, no plan approval — read what you need, make the change, run the one relevant check, report in three lines.
+**A small, local change goes straight into the code.** No contract block, no worker, no reviewer, no plan approval — read what you need and [QUALITY.md](./QUALITY.md), make the change, run the one relevant check, do the [self-review](./QUALITY.md#self-review) on your own diff, report in three lines plus its result.
+
+The self-review is what keeps this path from being the unchecked one: no second reader looks at this code, so it is the only pass that ever will. It is not skipped for being small. If it turns up a risk trigger, the fast path ends there.
 
 This is the default for a change that is confined to one area, has an obvious implementation, and touches none of the triggers below.
 
-**Risk triggers — the canonical list.** Hitting any one of these means the change is not small, whatever its line count: stop, and go to section 3. The same list classifies a change as high-risk and makes review mandatory, so a new kind of risk is added here once and takes effect everywhere.
+**Risk triggers — the canonical list.** Hitting any one of these means the change is not small, whatever its line count: stop, and go to section 3. The same list classifies a change as high-risk and sets how many reviewers it gets, so a new kind of risk is added here once and takes effect everywhere.
 
 - database schema, migrations, or a write that changes existing rows
 - a public API, a cross-layer contract, an emitted event, or a shared type
@@ -103,17 +105,21 @@ Never brief a `test-runner` to run suites in the background or side by side, and
 
 Prefer targeted typecheck, lint and focused tests first; run a full build or suite only when it materially validates the change. On failure, fix within the original scope, re-run only the affected checks, and allow about two repair rounds before reporting the real blocker instead of cycling.
 
+**Then self-review.** Once the checks have a result, run the [self-review](./QUALITY.md#self-review) over what you wrote, before any reviewer sees it. A worker has done its own pass, reported under `SELF-REVIEW`: do not repeat it. At integration, look only for what shows up across scopes.
+
 **Never hide a failure** through ignored diagnostics, unsafe casts, disabled lint rules, deleted tests, or quietly reduced acceptance criteria.
 
 ## 5. Review
 
-Send a `code-reviewer` whenever any risk trigger from section 2 was hit, and additionally for a sizeable refactor or verification that left real uncertainty. For ordinary work, review when the logic is non-trivial and skip it for small, well-covered changes.
+Every change that left the fast path gets a `code-reviewer`, on every axis, `standards` included. Whoever wrote the code does not sign it off: only the fast path relies on self-review alone. If a reviewer cannot run, the report says so as a risk.
 
-The axes, what to give each reviewer and how to handle findings: [REVIEW.md](./REVIEW.md).
+Risk decides how many instances, not whether; the rule is in [REVIEW.md](./REVIEW.md).
+
+The same file has the axes, what to give each reviewer, how to handle findings and where the loop ends.
 
 ## 6. Final gate and report
 
-Before reporting success, confirm the behavior is complete rather than scaffolded, the combined diff matches the frozen contract, no unrelated work was overwritten, the checks have real results, material findings are resolved or reported, and manual steps are listed.
+Before reporting success, confirm the behavior is complete rather than scaffolded, the combined diff matches the frozen contract, no unrelated work was overwritten, the checks have real results, the self-review ran, every review axis ran or its failure is reported as a risk, material findings are resolved or reported, and manual steps are listed.
 
 Ground the report in git, not in memory:
 
