@@ -1,6 +1,6 @@
 # CONTEXT.md — format
 
-Lives at `~/.claude/context/<repo-basename>/CONTEXT.md`. Never in the repository.
+Lives at `~/.claude/context/<main-tree-basename>/CONTEXT.md`. Never in the repository.
 
 Write the glossary in the language the team actually speaks; the structure below is what matters, not the English wording of its headings.
 

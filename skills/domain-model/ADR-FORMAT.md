@@ -1,6 +1,6 @@
 # ADR — format
 
-ADRs live at `~/.claude/context/<repo-basename>/adr/`, numbered sequentially: `0001-slug.md`, `0002-slug.md`. Never in the repository.
+ADRs live at `~/.claude/context/<main-tree-basename>/adr/`, numbered sequentially: `0001-slug.md`, `0002-slug.md`. Never in the repository.
 
 Create the directory lazily, when the first ADR is needed. Scan for the highest existing number and increment.
 

@@ -73,7 +73,7 @@ The agents name model aliases, not versions, so each tier follows Claude Code's 
 
 ## The private context directory
 
-Up to five kinds of file live per repository under `~/.claude/context/<repo-basename>/`, and **never inside the working tree** — a shared repository should not gain files that change how a whole team works:
+Up to five kinds of file live per repository under `~/.claude/context/<main-tree-basename>/`, and **never inside the working tree** — a shared repository should not gain files that change how a whole team works:
 
 - `PROJECT.md` — engineering mechanics: stack, verified commands, real seams, hazards, hard rules. Written by `project-profile`.
 - `CONTEXT.md` — the domain glossary. Written by `domain-model`, one confirmed term at a time.

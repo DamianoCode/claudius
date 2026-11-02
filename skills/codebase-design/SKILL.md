@@ -70,7 +70,7 @@ When designing an interface, ask: can I reduce the number of methods? Can I simp
 
 Tests live at seams, never against internals. **Agree the seams before writing tests** — write down which seams are under test and confirm them. You cannot test everything; agreeing the seams up front is how testing effort lands on critical paths and complex logic instead of every edge case.
 
-Which seams are real in *this* repository is a project fact, not a design principle. Read `~/.claude/context/<repo-basename>/PROJECT.md` — its "Seams and test coverage" section records where a genuine test culture exists and where there is none.
+Which seams are real in *this* repository is a project fact, not a design principle. Read `~/.claude/context/<main-tree-basename>/PROJECT.md` — its "Seams and test coverage" section records where a genuine test culture exists and where there is none.
 
 When no overlay exists, establish it cheaply before proposing a seam:
 

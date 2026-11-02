@@ -58,4 +58,4 @@ CONTRACT TOUCHPOINTS: <shared interfaces/keys/models or n/a>
 RISKS / UNKNOWN: <material uncertainty only; say "none" if genuinely none>
 ```
 
-Keep `FILES` to the entries the caller actually needs — typically under ten. If a section does not apply, write `n/a` rather than padding it.
+Keep `FILES` to the entries the caller actually needs. If a section does not apply, write `n/a` rather than padding it.

@@ -77,7 +77,7 @@ A task too large for one reviewable change does not belong in one run: stop and 
 
 Not on the fast path? Choose the workflow by engineering risk — see [CLASSIFY.md](./CLASSIFY.md) for the tiers and the parallelism rules. Freeze a contract only for details that must stay consistent across layers or workers; the format is in [CONTRACT.md](./CONTRACT.md).
 
-Reuse facts already established in this conversation. Read `~/.claude/context/<repo-basename>/PROJECT.md` (verified commands, seams, hazards, enforced rules) and `CONTEXT.md` (domain glossary) when they exist — never create them in the working tree. Neither is required; without them, resolve the same facts from the repository and consider `/claudius:project-profile` afterwards.
+Reuse facts already established in this conversation. Read `~/.claude/context/<main-tree-basename>/PROJECT.md` (verified commands, seams, hazards, enforced rules) and `CONTEXT.md` (domain glossary) when they exist — never create them in the working tree. Neither is required; without them, resolve the same facts from the repository and consider `/claudius:project-profile` afterwards.
 
 When uncertainty remains, run one focused `claudius:Explore` for the current implementation, the best analogous pattern, reusable helpers, and contract touchpoints. Ask for paths, symbols and conclusions — never file dumps. A second `Explore` is justified only for an independent question.
 

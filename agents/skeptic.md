@@ -29,7 +29,7 @@ An objection you cannot ground is not an objection. Turn it into an assumption u
 
 ## What to examine
 
-Read the repository first — the code the proposal touches, its callers, and `~/.claude/context/<repo-basename>/PROJECT.md` if it exists, whose "Recurring hazards" and "Hard rules" list what this project has already been bitten by. Then, as applicable:
+Read the repository first — the code the proposal touches, its callers, and `~/.claude/context/<main-tree-basename>/PROJECT.md` if it exists, whose "Recurring hazards" and "Hard rules" list what this project has already been bitten by. Then, as applicable:
 
 1. **Is the problem real?** Does the stated goal describe something the code actually suffers from, or is it already solved — by an existing helper, a pattern used elsewhere in the repository, a setting nobody turned on?
 2. **Does the proposal reach the goal?** Trace it through the real code. Where does it meet a caller, a data shape or an ordering it has not accounted for?

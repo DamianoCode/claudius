@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Project Profile
 
-Produce `~/.claude/context/<repo-basename>/PROJECT.md`: the project-specific overlay that lets the generic skills (`diagnose`, `codebase-design`, `grill`, `code-reviewer`, `implement`) act concretely without carrying any one project's details in their own text.
+Produce `~/.claude/context/<main-tree-basename>/PROJECT.md`: the project-specific overlay that lets the generic skills (`diagnose`, `codebase-design`, `grill`, `code-reviewer`, `implement`) act concretely without carrying any one project's details in their own text.
 
 ## Rules
 
