@@ -39,6 +39,14 @@ test('the TypeScript rules in the agent match the canonical list exactly', () =>
   assert.deepEqual(agent, canonical);
 });
 
+test('the self-review in the agent matches the canonical list exactly', () => {
+  const canonical = bulletsUnder(read(CANONICAL), '\n## Self-review\n');
+  const agent = bulletsUnder(read(AGENT), '\n## 5. Self-review\n');
+
+  assert.ok(canonical.length >= 8, 'the canonical self-review looks truncated');
+  assert.deepEqual(agent, canonical);
+});
+
 test('the orchestrator actually points writers at the canonical rules', () => {
   // The whole point of the split is that the bar follows the code, not the writer. If the
   // spine stops linking QUALITY.md, main-session work silently loses the checklist again.
