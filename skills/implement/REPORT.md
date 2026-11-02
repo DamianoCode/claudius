@@ -18,20 +18,23 @@ Close with `TOTAL: <n> files, +<a>/-<b>`.
 
 **Behavior** — one or two sentences: what a user could not do before and can now, or what was broken and is now correct. If the change is invisible to users, say so plainly.
 
-**Verification** — every command actually run, each with `PASS` / `FAIL` / `BLOCKED` and the reason for anything not green. Never list a command you did not run.
+**Verification** — every command actually run, each with `PASS` / `FAIL` / `BLOCKED` and the reason for anything not green. Never list a command you did not run. End with the self-review result: what it fixed, or `clean`.
+
+Beyond the fast path a fourth section is always there:
+
+**Review** — one line per axis: `OK`, `findings fixed — <count>`, `dropped — <evidence>`, or the unresolved findings themselves. Name the reason when a reviewer could not run.
 
 ## Sections that appear only when they carry something
 
-- **Review** — one line per axis run: `OK`, `findings fixed — <count>`, or the unresolved findings themselves. Omit entirely when no review ran and none was required; name the reason only when a required axis was skipped.
 - **Manual steps** — migrations, env vars, deploy actions, backfills.
-- **Risks / follow-ups** — material items only.
+- **Risks / follow-ups** — material items, plus judgement-call smells left unfixed.
 - **Commit suggestion** — `type(scope): message` per the repository's convention, with a plain statement that nothing has been committed. Include it whenever the change is worth committing.
 
 Offer the full breakdown in one line if you left sections out, so the user can ask for it without guessing that more exists.
 
 ## Scale
 
-Fast-path work gets three lines: what changed, what behaves differently, whether the check passed. A one-line fix does not need headings — the commit suggestion still comes along when the change is worth committing.
+Fast-path work gets three lines: what changed, what behaves differently, whether the check passed; then the self-review result: what it fixed, or `clean`. A self-review that left no trace cannot be told from one that never ran. A one-line fix does not need headings — the commit suggestion still comes along when the change is worth committing.
 
 Beyond roughly fifteen changed files, group bullets by area, list individual files only where a reviewer needs to look, and summarize the rest as `<n> further files — <what they have in common>`.
 

@@ -4,9 +4,9 @@ Choose the workflow by engineering risk, not by file count. The fast path in `SK
 
 ## Risk triggers
 
-The canonical list of risk triggers is the one in [SKILL.md](./SKILL.md), under "Fast path". It does triple duty: hitting a trigger ends the fast path, classifies the change as COMPLEX / HIGH-RISK, and makes review mandatory. Add a new kind of risk **there**, and it takes effect in all three places at once.
+The canonical list of risk triggers is the one in [SKILL.md](./SKILL.md), under "Fast path". It does triple duty: hitting a trigger ends the fast path, classifies the change as COMPLEX / HIGH-RISK, and sets how many reviewers it gets. Add a new kind of risk **there**, and it takes effect in all three places at once.
 
-Two further conditions call for review without being risks in themselves: a sizeable refactor, and verification that left meaningful uncertainty.
+How many reviewers a change gets is decided once, in [REVIEW.md](./REVIEW.md). Two conditions add reviewers there without being risks in themselves: a sizeable refactor, and verification that left real uncertainty.
 
 ## STANDARD
 
@@ -15,7 +15,7 @@ A normal feature, bug fix or refactor in one coherent area — several files, on
 - At most one focused `claudius:Explore`, and only if the important locations and patterns are not already known.
 - Implement in the main conversation. A worker earns its keep here only when the detail would flood this context or a second scope can run alongside it.
 - Verify after integration.
-- Review when the business logic is non-trivial or the diff justifies it.
+- `code-reviewer` is required, on all three axes.
 
 ## COMPLEX / HIGH-RISK
 
@@ -25,7 +25,7 @@ Any risk trigger, or a substantial refactor.
 - Freeze the relevant contract and the work scopes before any edit.
 - One implementation owner where the shared context is strong; parallelize only truly independent scopes.
 - Independent final verification is required.
-- `code-reviewer` is required, on separate axes.
+- `code-reviewer` is required, on all three axes.
 
 ## PARALLEL
 
