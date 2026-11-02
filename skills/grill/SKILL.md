@@ -53,7 +53,7 @@ Push hardest where being wrong is expensive:
 - **What is explicitly out of scope.** The no-s prevent scope creep more reliably than the yes-s.
 - **How we will know it worked.** Observable acceptance criteria, in the user's words.
 
-Read `~/.claude/context/<repo-basename>/PROJECT.md` if it exists and add its "Recurring hazards" to the interview — those are the traps this specific project has already been bitten by.
+Read `~/.claude/context/<main-tree-basename>/PROJECT.md` if it exists and add its "Recurring hazards" to the interview — those are the traps this specific project has already been bitten by.
 
 ## Finishing
 
@@ -87,4 +87,4 @@ If new domain terms were settled or renamed during the interview, call the Skill
 /claudius:implement <task>, per the frozen DECISIONS / OUT OF SCOPE / ACCEPTANCE CRITERIA block above
 ```
 
-The conversation already carries the block, so they never have to paste it back.
+The conversation already carries the block, so they never have to paste it back. When the work is too large for one reviewable change, give them `/claudius:plan <task>` instead, in the same way.

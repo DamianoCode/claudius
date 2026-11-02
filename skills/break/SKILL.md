@@ -15,7 +15,7 @@ Respond in the user's language.
 
 ## 1. Pin the target
 
-Settle these before spawning anything. Resolve what the repository answers — entry points, how to run it, which tests already cover it — from the code and from `~/.claude/context/<repo-basename>/PROJECT.md` if it exists. Ask the user, with the **AskUserQuestion** tool, only for what is theirs to decide:
+Settle these before spawning anything. Resolve what the repository answers — entry points, how to run it, which tests already cover it — from the code and from `~/.claude/context/<main-tree-basename>/PROJECT.md` if it exists. Ask the user, with the **AskUserQuestion** tool, only for what is theirs to decide:
 
 - **Invariants** — what must stay true. Propose them from the tests, types and validation, and let the user correct them. Without invariants a breaker cannot tell a bug from a design choice.
 - **Environment** — where the attack runs: the test runner, a local server, a disposable database. **Never production**, and never shared data that somebody else depends on.

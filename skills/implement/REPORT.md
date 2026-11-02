@@ -28,7 +28,7 @@ Beyond the fast path a fourth section is always there:
 
 - **Manual steps** — migrations, env vars, deploy actions, backfills.
 - **Risks / follow-ups** — material items, plus judgement-call smells left unfixed.
-- **Commit suggestion** — `type(scope): message` per the repository's convention, with a plain statement that nothing has been committed. Include it whenever the change is worth committing.
+- **Commit suggestion** — `type(scope): message` per the repository's convention, with a plain statement that nothing has been committed. A plan that committed lists its commit range instead. Include it whenever the change is worth committing.
 
 Offer the full breakdown in one line if you left sections out, so the user can ask for it without guessing that more exists.
 

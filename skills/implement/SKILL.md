@@ -2,7 +2,7 @@
 name: implement
 description: Robust implementation workflow for features, bug fixes and refactors with bounded reconnaissance, production implementation, verification, self-review, and independent review of everything beyond the fast path.
 disable-model-invocation: true
-argument-hint: "[task]"
+argument-hint: "[task] | plan <slug>"
 ---
 
 # Implement
@@ -20,6 +20,7 @@ Execute `$ARGUMENTS` as the implementation orchestrator, optimizing in this orde
 | [QUALITY.md](./QUALITY.md) | you are about to write code yourself, and again for the self-review |
 | [REVIEW.md](./REVIEW.md) | the change left the fast path and reaches section 5 |
 | [REPORT.md](./REPORT.md) | you are writing the final report |
+| [MILESTONES.md](./MILESTONES.md) | `$ARGUMENTS` is `plan <slug>`: read it first, it drives everything below |
 
 ## Ask, do not guess
 
@@ -72,9 +73,11 @@ When one fires mid-implementation, say so in one line and pick the discipline ba
 
 ## 3. Classify and plan
 
+A task too large for one reviewable change does not belong in one run: stop and ask the user to run `/claudius:plan <task>`, which is reserved for explicit user invocation.
+
 Not on the fast path? Choose the workflow by engineering risk — see [CLASSIFY.md](./CLASSIFY.md) for the tiers and the parallelism rules. Freeze a contract only for details that must stay consistent across layers or workers; the format is in [CONTRACT.md](./CONTRACT.md).
 
-Reuse facts already established in this conversation. Read `~/.claude/context/<repo-basename>/PROJECT.md` (verified commands, seams, hazards, enforced rules) and `CONTEXT.md` (domain glossary) when they exist — never create them in the working tree. Neither is required; without them, resolve the same facts from the repository and consider `/claudius:project-profile` afterwards.
+Reuse facts already established in this conversation. Read `~/.claude/context/<main-tree-basename>/PROJECT.md` (verified commands, seams, hazards, enforced rules) and `CONTEXT.md` (domain glossary) when they exist — never create them in the working tree. Neither is required; without them, resolve the same facts from the repository and consider `/claudius:project-profile` afterwards.
 
 When uncertainty remains, run one focused `claudius:Explore` for the current implementation, the best analogous pattern, reusable helpers, and contract touchpoints. Ask for paths, symbols and conclusions — never file dumps. A second `Explore` is justified only for an independent question.
 
@@ -129,4 +132,4 @@ git --no-pager diff --numstat <BASE_SHA> && git --no-pager diff --name-status <B
 
 Worker reports supply the *why*; git supplies the *what*. If they disagree, git wins and the discrepancy is a risk. Format: [REPORT.md](./REPORT.md).
 
-Do not commit, push, create branches or PRs, run migrations, or make destructive repository changes without explicit user instruction.
+Do not commit, push, create branches or PRs, run migrations, or make destructive repository changes without explicit user instruction. An approved plan's `commits` answer is that instruction for its commits and branch, and only those.

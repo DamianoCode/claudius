@@ -1,6 +1,6 @@
 # SECURITY.md format
 
-The running state of security audits for one repository, kept at `~/.claude/context/<repo-basename>/SECURITY.md` — never in the working tree. The main conversation is its only writer; the agents only read what the brief hands them.
+The running state of security audits for one repository, kept at `~/.claude/context/<main-tree-basename>/SECURITY.md` — never in the working tree. The main conversation is its only writer; the agents only read what the brief hands them.
 
 Headings and field keys stay in English, because the next run finds its prior state by them. Everything else follows the user's language.
 

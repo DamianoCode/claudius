@@ -229,10 +229,10 @@ function checkEngineer(finalText, transcript) {
   // A shell command wrote somewhere. The worker is the only one who knows whether that
   // was the repository, so it is asked rather than told — it may have changed nothing.
   if (edited === MAYBE) {
-    return 'No Edit/Write was recorded, but a shell command in this run writes files, and there is no completion report. Continue in the same context. If it changed files in the repository, do not redo the work: return the compact SCOPE / ASSUMPTIONS / CHANGED / TESTS / PUBLIC CONTRACT / HANDOFF / VERIFY / RISKS report — `NO_CHANGE:` or `BLOCKED:` alone does not cover files that changed. If nothing in the repository changed, say so in one line and finish with `NO_CHANGE: <evidence>` or `BLOCKED: <specific prerequisite>`, or implement the assigned behavior now if that is what is still missing.';
+    return 'No Edit/Write was recorded, but a shell command in this run writes files, and there is no completion report. Continue in the same context. If it changed files in the repository, do not redo the work: return the compact SCOPE / ASSUMPTIONS / CHANGED / TESTS / SELF-REVIEW / PUBLIC CONTRACT / HANDOFF / VERIFY / RISKS report — `NO_CHANGE:` or `BLOCKED:` alone does not cover files that changed. If nothing in the repository changed, say so in one line and finish with `NO_CHANGE: <evidence>` or `BLOCKED: <specific prerequisite>`, or implement the assigned behavior now if that is what is still missing.';
   }
 
-  return 'Implementation changed files but did not provide the required completion report. Do not redo the implementation. Inspect your existing work/verification and return the compact SCOPE / ASSUMPTIONS / CHANGED / TESTS / PUBLIC CONTRACT / HANDOFF / VERIFY / RISKS report.';
+  return 'Implementation changed files but did not provide the required completion report. Do not redo the implementation. Inspect your existing work/verification and return the compact SCOPE / ASSUMPTIONS / CHANGED / TESTS / SELF-REVIEW / PUBLIC CONTRACT / HANDOFF / VERIFY / RISKS report.';
 }
 
 function checkTestRunner(finalText) {

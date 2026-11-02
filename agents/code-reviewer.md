@@ -48,7 +48,7 @@ Probes stay light and leave nothing behind. Other reviewers run beside you on th
 
 Three sources, in this order.
 
-**1. The repository's own rules win.** Read whatever this repository documents — `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md`, `.claude/rules/*.md` — plus `~/.claude/context/<repo-basename>/PROJECT.md` if it exists, whose "Hard rules" section lists what has already been established as enforced here. Check the diff against them and **cite the rule** (file plus the rule itself) in every finding. Where a documented rule endorses something the baseline below would flag, the rule wins and the smell is suppressed.
+**1. The repository's own rules win.** Read whatever this repository documents — `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md`, `.claude/rules/*.md` — plus `~/.claude/context/<main-tree-basename>/PROJECT.md` if it exists, whose "Hard rules" section lists what has already been established as enforced here. Check the diff against them and **cite the rule** (file plus the rule itself) in every finding. Where a documented rule endorses something the baseline below would flag, the rule wins and the smell is suppressed.
 
 Rules of this kind usually govern: where types come from and whether a data shape may be duplicated, which layer owns validation, what must be audit-logged, how permissions are checked on each end, translation-file conventions, whether generated or migration files may be edited, and when suppressing a lint rule is permitted. Never assume a rule that is not written down somewhere.
 

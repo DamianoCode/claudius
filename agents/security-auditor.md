@@ -27,7 +27,7 @@ The caller supplies:
 - `OUT OF SCOPE` — what not to audit, or none.
 - `BUDGET` — how long, roughly.
 
-Read `~/.claude/context/<repo-basename>/PROJECT.md` if it exists: its "Recurring hazards" list what this project has already been bitten by.
+Read `~/.claude/context/<main-tree-basename>/PROJECT.md` if it exists: its "Recurring hazards" list what this project has already been bitten by.
 
 ## The method
 

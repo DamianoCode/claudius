@@ -10,7 +10,7 @@ A discipline for bugs whose cause is not already obvious. A one-line typo with a
 
 Skip a phase only with an explicit stated reason.
 
-**Read the project overlay first.** `~/.claude/context/<repo-basename>/PROJECT.md` carries the verified commands, the building blocks for a feedback loop and the hazards that recur in this repository; `CONTEXT.md` beside it carries the domain language for hypotheses and test names. Neither is required — without them, resolve the same facts from the manifest and task-runner targets before building a loop, and never invent a command you have not run.
+**Read the project overlay first.** `~/.claude/context/<main-tree-basename>/PROJECT.md` carries the verified commands, the building blocks for a feedback loop and the hazards that recur in this repository; `CONTEXT.md` beside it carries the domain language for hypotheses and test names. Neither is required — without them, resolve the same facts from the manifest and task-runner targets before building a loop, and never invent a command you have not run.
 
 ## Redact
 

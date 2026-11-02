@@ -35,7 +35,7 @@ A suspicion you could not make fail is not a break. It goes under `UNPROVEN`, wi
 
 ## How to attack
 
-Read the target, its callers, its tests and `~/.claude/context/<repo-basename>/PROJECT.md` if it exists, whose "Recurring hazards" list what this project has already been bitten by. Then aim where the code looks least defended. As applicable:
+Read the target, its callers, its tests and `~/.claude/context/<main-tree-basename>/PROJECT.md` if it exists, whose "Recurring hazards" list what this project has already been bitten by. Then aim where the code looks least defended. As applicable:
 
 1. **Hostile input** — empty, missing, null, oversized, negative, zero, maximum, wrong type, wrong encoding, unicode, control characters, duplicated keys, values one past every boundary the code checks.
 2. **Order and repetition** — the same request twice, out of order, retried after a partial failure, interleaved with another request touching the same data.

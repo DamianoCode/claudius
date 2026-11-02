@@ -1,6 +1,6 @@
 # Claudius
 
-An implementation workflow for Claude Code. One orchestrator that classifies work by engineering risk, eight subagents on tiered models, and the disciplines that prevent the two expensive failures: **building the wrong thing correctly**, and **fixing a bug you never actually located**.
+An implementation workflow for Claude Code. One orchestrator that classifies work by engineering risk, a plan file for work too large for one run, eight subagents on tiered models, and the disciplines that prevent the two expensive failures: **building the wrong thing correctly**, and **fixing a bug you never actually located**.
 
 Nothing here is a process framework. Every piece is a plain Markdown file you are meant to fork and rewrite.
 
@@ -29,6 +29,7 @@ That builds a private overlay — commands, seams, hazards, rules — outside th
 |---|---|---|
 | `/claudius:implement` | you | The orchestrator. Takes a small change straight into the code with a self-review of its own diff; everything else gets classification and an independent review on every axis, with a frozen contract and workers when the change earns them. Reports from `git`, not from memory. |
 | `/claudius:grill` | you | Relentless interview before code. Design tree worked in rounds, asked as pickable options rather than a wall of text. Produces the acceptance criteria `implement` then freezes. |
+| `/claudius:plan` | you | For work too large for one run. Turns it into an approved file of vertical milestones, each with its scope, acceptance and a verify command, and puts its own checkpoints wherever a human has to decide. `/claudius:implement plan <slug>` then runs it unattended through the full `implement` discipline, stopping only for what you need to see. `status` shows progress, `amend` corrects the course. |
 | `/claudius:project-profile` | you | Builds the private per-project overlay. Verified commands only. |
 | `/claudius:challenge` | you or model | One independent second opinion on an approach before it is built: a single `skeptic` in a clean context, given the proposal without the case for it. Fires on its own only when a plan commits to something expensive to reverse. |
 | `/claudius:break` | you | Attacks one feature that matters — hostile input, boundaries, concurrency, failing dependencies — with a single `breaker`, and reports only what it made fail, each break with a reproduction that ran. On demand only, never a step of `implement`. |
@@ -40,7 +41,7 @@ That builds a private overlay — commands, seams, hazards, rules — outside th
 
 The bottom four fire on their own when the task calls for them; you never type those.
 
-`implement` keeps its reference material in separate files — [CLASSIFY](skills/implement/CLASSIFY.md), [CONTRACT](skills/implement/CONTRACT.md), [REVIEW](skills/implement/REVIEW.md), [REPORT](skills/implement/REPORT.md) — and reads one only on reaching the phase that needs it. A one-line fix never pays for the review chapter.
+`implement` keeps its reference material in separate files — [CLASSIFY](skills/implement/CLASSIFY.md), [CONTRACT](skills/implement/CONTRACT.md), [REVIEW](skills/implement/REVIEW.md), [REPORT](skills/implement/REPORT.md), [MILESTONES](skills/implement/MILESTONES.md) — and reads one only on reaching the phase that needs it. A one-line fix never pays for the review chapter.
 
 ### Agents
 
@@ -58,7 +59,7 @@ The agents name model aliases, not versions, so each tier follows Claude Code's 
 - **`SessionEnd`** — in worktrees mode, frees the ending session's slots when nothing in them would be lost. Never blocks an exit.
 - **`SubagentStop`** — refuses a worker that stopped without editing anything or without its completion report — a reviewer without its `REVIEW`, a skeptic without its `VERDICT`, a breaker without its `BREAKER`, an auditor without its `AUDIT`, a verifier without its `VERIFY` — and asks it to continue in the same context once. Never loops. The request arrives as feedback rather than a hook error, which needs Claude Code 2.1.163 or later.
 
-## Four ideas worth stealing even if you take nothing else
+## Five ideas worth stealing even if you take nothing else
 
 **Disagreement needs evidence, and so does agreement.** `implement` opens with an objection gate: if it would solve the task differently it says so before classifying — the objection, a `path:line` or a failure scenario behind it, the alternative — and then does what you decide. Having no objection is the normal case and costs nothing. For a decision that is expensive to reverse, `challenge` adds one `skeptic` in a clean context, handed the proposal with the argument for it removed. One, not a council: agents assigned to doubt, to believe and to judge are the same model reading the same repository, with opinions set by the role rather than by what they found.
 
@@ -68,12 +69,15 @@ The agents name model aliases, not versions, so each tier follows Claude Code's 
 
 **Ceremony is priced per change.** A small local change goes straight into the code with a three-line report. What ends that fast path is not line count but risk: schema, a public contract, auth, transactions, an effect that leaves the system. The trigger list is explicit, so the cheap path is cheap and the expensive path is never skipped by accident. Cheap does not mean unread: every writer, on every path, ends with a self-review of the actual diff against a fixed list, and reports what it found, so a reviewer's time goes on what a writer cannot see in its own work.
 
+**Unattended means bounded, not unsupervised.** A plan is approved once, then run through without questions, and what makes that safe is written down rather than hoped for. Each milestone takes the same path as a manual change, because there is one orchestrator, not a second and thinner one. Repairs and review fixes share a budget of three rounds, counted in the plan file so compaction cannot reset it. Only a red check or an unresolved `HIGH` stops on it; a judgement call goes to the log. The file holds the state, so a run stopped on Friday resumes in a new session on Monday, and a correction you give mid-run reaches every later milestone.
+
 ## The private context directory
 
-Up to four files live per repository under `~/.claude/context/<repo-basename>/`, and **never inside the working tree** — a shared repository should not gain files that change how a whole team works:
+Up to five kinds of file live per repository under `~/.claude/context/<main-tree-basename>/`, and **never inside the working tree** — a shared repository should not gain files that change how a whole team works:
 
 - `PROJECT.md` — engineering mechanics: stack, verified commands, real seams, hazards, hard rules. Written by `project-profile`.
 - `CONTEXT.md` — the domain glossary. Written by `domain-model`, one confirmed term at a time.
+- `plans/<slug>.md` — approved plans and the state of their runs. Written by `plan`, kept current by `implement`. See [PLAN-FORMAT](skills/plan/PLAN-FORMAT.md).
 - `workspace.json` — how work in progress is isolated: worktree slots or branches. See `skills/workspace/SKILL.md`.
 - `SECURITY.md` — open findings, what needs validation, and which boundaries were covered at which commit. Written by `security-audit`, never with a secret's value in it. See [SECURITY-FORMAT](skills/security-audit/SECURITY-FORMAT.md).
 
@@ -81,9 +85,11 @@ The folder is named after the **main** working tree, so a session inside a linke
 
 All are optional. Without them every skill still works; it just re-derives the same facts from the repository on each run.
 
+A plan run updates its file after every step. If your permission mode prompts for that, add `Edit(~/.claude/context/**)` to your allow rules so an unattended run does not sit waiting on it.
+
 ## Language
 
-The skills and agents are written in English. They answer in whatever language you write in, and the private notes they produce follow the language your team actually speaks. Only the structural keys stay in English, because the skills and the hooks find each other by them: `DECISIONS`, `OUT OF SCOPE`, `ACCEPTANCE CRITERIA` and `OPEN RISKS` from an interview; `SCOPE`, `CHANGED`, `RESULT`, `REVIEW`, `AXIS`, `VERDICT`, `BREAKER`, `AUDIT` and `VERIFY` from the agents, and the headings of `SECURITY.md`. Trigger phrases in a skill description are the other exception — they are matched against what the user actually types, so they stay multilingual.
+The skills and agents are written in English. They answer in whatever language you write in, and the private notes they produce follow the language your team actually speaks. Only the structural keys stay in English, because the skills and the hooks find each other by them: `DECISIONS`, `OUT OF SCOPE`, `ACCEPTANCE CRITERIA` and `OPEN RISKS` from an interview; the keys of a plan file; `SCOPE`, `CHANGED`, `RESULT`, `REVIEW`, `AXIS`, `VERDICT`, `BREAKER`, `AUDIT` and `VERIFY` from the agents, and the headings of `SECURITY.md`. Trigger phrases in a skill description are the other exception — they are matched against what the user actually types, so they stay multilingual.
 
 ## Development
 

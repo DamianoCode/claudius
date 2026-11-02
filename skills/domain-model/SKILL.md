@@ -22,7 +22,7 @@ git rev-parse --path-format=absolute --git-common-dir
 Take the **basename of its parent directory** — the main working tree, the same from every linked worktree — and use:
 
 ```
-~/.claude/context/<repo-basename>/
+~/.claude/context/<main-tree-basename>/
 ├── PROJECT.md          ← engineering overlay (owned by the project-profile skill, not this one)
 ├── CONTEXT.md          ← the glossary
 └── adr/
@@ -30,7 +30,7 @@ Take the **basename of its parent directory** — the main working tree, the sam
     └── 0002-slug.md
 ```
 
-On Windows that is `C:\Users\<user>\.claude\context\<repo-basename>\`.
+On Windows that is `C:\Users\<user>\.claude\context\<main-tree-basename>\`.
 
 Create files lazily — only when there is something real to write. Never create a stub "to be filled in later".
 
