@@ -160,6 +160,20 @@ test('the notice is silent without a pool and speaks once with one', () => {
   });
 });
 
+test("the notice tells a slot from another tool's worktree", () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, {});
+    const slotPath = lastLine(slot(w, ['take', 'feat/a']).stdout);
+    const foreign = join(boundary, 'ide-task');
+    git(w.main, 'worktree', 'add', '-q', '-b', 'feat/ide', foreign, 'origin/main');
+
+    assert.match(runHook('workspace-notice.mjs', { cwd: slotPath }, { env: w.env }).stdout, /free it with: .*release/);
+    const spoken = runHook('workspace-notice.mjs', { cwd: foreign }, { env: w.env }).stdout;
+    assert.match(spoken, /ide-task of main, which is not a slot/);
+    assert.doesNotMatch(spoken, /release/);
+  });
+});
+
 // --- bin/workspace.mjs, worktrees mode ----------------------------------------
 
 test('without a config the CLI leaves the repository alone and names the way to opt in', () => {
@@ -882,36 +896,34 @@ function fakeGh(dir, env, prs) {
   return { ...path, NODE_OPTIONS: `--require "${preload}"` };
 }
 
-test('sweep removes only what a merged pull request of this repository actually contained', () => {
+test('sweep frees only the slots a merged pull request of this repository actually contained', () => {
   withTmpDir('claudius-pool-', (boundary) => {
     const w = world(boundary, {});
-    const worktree = (branch) => {
-      const path = join(boundary, branch.replace('/', '-'));
-      git(w.main, 'worktree', 'add', '-q', '-b', branch, path, 'origin/main');
-      writeFileSync(join(path, `${basename(path)}.txt`), branch);
+    const claimed = (branch) => {
+      const path = lastLine(slot(w, ['take', branch]).stdout);
+      writeFileSync(join(path, `${basename(branch)}.txt`), branch);
       git(path, 'add', '.');
       git(path, 'commit', '-qm', branch);
-      git(path, 'push', '-q', 'origin', branch);
-      writeFileSync(join(path, '.env.local'), 'SECRET=1\n'); // ignored, so invisible to the safety check
+      git(path, 'push', '-q', '-u', 'origin', branch);
       return path;
     };
-    const fork = worktree('develop');
-    const done = worktree('feat/done');
-    const reused = worktree('feat/reused');
+    const fork = claimed('develop');
+    const done = claimed('feat/done');
+    const reused = claimed('feat/reused');
     const reusedHead = git(reused, 'rev-parse', 'HEAD');
     writeFileSync(join(reused, 'more.txt'), 'after the merge');
     git(reused, 'add', '.');
     git(reused, 'commit', '-qm', 'after the merge');
     git(reused, 'push', '-q', 'origin', 'feat/reused');
     // The PR head is one commit past the local branch — merged on GitHub after a review fix.
-    const behind = worktree('feat/behind');
+    const behind = claimed('feat/behind');
     writeFileSync(join(behind, 'review.txt'), 'fixed in review');
     git(behind, 'add', '.');
     git(behind, 'commit', '-qm', 'review fix');
     git(behind, 'push', '-q', 'origin', 'feat/behind');
     const behindHead = git(behind, 'rev-parse', 'HEAD');
     git(behind, 'reset', '-q', '--hard', 'HEAD~1');
-    const unfetched = worktree('feat/unfetched');
+    const unfetched = claimed('feat/unfetched');
 
     const gh = fakeGh(boundary, w.env, [
       { headRefName: 'develop', headRefOid: git(fork, 'rev-parse', 'HEAD'), isCrossRepository: true, number: 7, state: 'MERGED' },
@@ -923,16 +935,62 @@ test('sweep removes only what a merged pull request of this repository actually 
     const result = slot(w, ['sweep', '--yes'], w.main, { env: gh });
     assert.equal(result.status, 0, result.stderr);
 
-    assert.ok(!existsSync(done), 'the merged branch of this repository is swept');
-    assert.ok(existsSync(join(fork, '.env.local')), 'a fork\'s pull request says nothing about a local branch');
-    assert.ok(existsSync(join(reused, '.env.local')), 'commits after the merge keep the worktree');
+    const onBranch = (path) => git(path, 'branch', '--show-current');
+    assert.equal(onBranch(done), '', 'the merged branch of this repository is swept');
+    assert.equal(onBranch(fork), 'develop', "a fork's pull request says nothing about a local branch");
+    assert.equal(onBranch(reused), 'feat/reused', 'commits after the merge keep the slot');
     assert.match(result.stderr, /SKIP .*feat\/reused.*did not contain/);
-    assert.ok(!existsSync(behind), 'a branch the PR head contains is swept too');
-    assert.ok(existsSync(join(unfetched, '.env.local')), 'a head this clone does not have covers nothing');
+    assert.equal(onBranch(behind), '', 'a branch the PR head contains is swept too');
+    assert.equal(onBranch(unfetched), 'feat/unfetched', 'a head this clone does not have covers nothing');
     assert.match(result.stderr, /SKIP .*feat\/unfetched.*git fetch origin/);
     const branches = git(w.main, 'branch', '--format=%(refname:short)').split(/\r?\n/);
     assert.ok(!branches.includes('feat/done') && !branches.includes('feat/behind'));
     assert.ok(['develop', 'feat/reused', 'feat/unfetched'].every((branch) => branches.includes(branch)));
+  });
+});
+
+test("sweep leaves another tool's worktree in place and names the ones whose folder is gone", () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, {});
+    const other = (branch) => {
+      const path = join(boundary, branch.replace('/', '-'));
+      git(w.main, 'worktree', 'add', '-q', '-b', branch, path, 'origin/main');
+      writeFileSync(join(path, 'x.txt'), branch);
+      git(path, 'add', '.');
+      git(path, 'commit', '-qm', branch);
+      git(path, 'push', '-q', 'origin', branch);
+      return path;
+    };
+    const ide = other('feat/ide');
+    const gone = other('feat/gone');
+    rmSync(gone, { recursive: true, force: true });
+
+    const gh = fakeGh(boundary, w.env, [
+      { headRefName: 'feat/ide', headRefOid: git(ide, 'rev-parse', 'HEAD'), isCrossRepository: false, number: 8, state: 'MERGED' },
+    ]);
+    const dry = slot(w, ['sweep'], w.main, { env: gh });
+    assert.equal(dry.status, 0, dry.stderr);
+    assert.match(dry.stderr, /LEAVE feat-ide .*not a slot/);
+    assert.match(dry.stderr, /GONE feat-gone .*git worktree prune/);
+
+    const result = slot(w, ['sweep', '--yes'], w.main, { env: gh });
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(existsSync(join(ide, 'x.txt')), 'a worktree the pool did not make is never removed');
+    assert.ok(git(w.main, 'branch', '--format=%(refname:short)').split(/\r?\n/).includes('feat/ide'));
+    assert.ok(!git(w.main, 'worktree', 'list').includes('feat-gone'), 'the entry of a deleted folder is pruned');
+  });
+});
+
+test('status lists a worktree whose folder is gone instead of failing on it', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, {});
+    const gone = join(boundary, 'gone');
+    git(w.main, 'worktree', 'add', '-q', '-b', 'feat/gone', gone, 'origin/main');
+    rmSync(gone, { recursive: true, force: true });
+    const result = slot(w, ['status'], w.main, { env: fakeGh(boundary, w.env, []) });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout + result.stderr, /\(gone\).*missing/);
+    assert.match(slot(w, ['take', 'feat/gone']).stderr, /folder is gone.*git worktree prune/);
   });
 });
 

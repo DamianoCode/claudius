@@ -58,7 +58,7 @@
 //                                  refuses while work is uncommitted or unpushed
 //   workspace.mjs mode [worktrees|branches|off]
 //                                  show or switch the mode
-//   workspace.mjs sweep [--yes]    free slots and remove old worktrees whose PR has merged
+//   workspace.mjs sweep [--yes]    free slots whose PR has merged or whose session has ended
 //   workspace.mjs session-end      SessionEnd hook: free the ending session's slots when safe
 //
 // A claim records the Claude Code session and process that made it. A slot whose
@@ -77,12 +77,12 @@ import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } fr
 
 import { canonical, locateRepo } from '../hooks/lib/repo.mjs';
 import {
-  MODES, bindingLine, configBinding, configPath as workspaceConfigPath, disabledEverywhere,
+  LOCK_REASON, MODES, SLOT_MARK, adminDir, bindingLine, configBinding, configPath as workspaceConfigPath,
+  disabledEverywhere,
 } from '../hooks/lib/workspace.mjs';
 import { detectConfig } from './lib/detect.mjs';
 
 const log = (...parts) => console.error(...parts);
-const LOCK_REASON = 'claudius worktree pool';
 
 class Refusal extends Error {}
 
@@ -90,7 +90,10 @@ class Refusal extends Error {}
 
 function git(cwd, ...args) {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
-  if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed:\n${result.stderr.trim()}`);
+  // A cwd that no longer exists fails before git starts: no status, no stderr, only error.
+  if (result.status !== 0) {
+    throw new Error(`git ${args.join(' ')} failed:\n${(result.stderr || result.error?.message || '').trim()}`);
+  }
   return result.stdout.trim();
 }
 
@@ -236,6 +239,9 @@ function worktrees(ctx) {
         branch: fields.branch?.replace('refs/heads/', '') || null,
         locked: 'locked' in fields,
         lockReason: fields.locked ?? null,
+        // Its folder is gone — deleted by hand or by the tool that made it — and git keeps
+        // only the entry until `git worktree prune`. Nothing can run inside it.
+        missing: 'prunable' in fields || !existsSync(fields.worktree),
       };
     });
 }
@@ -243,17 +249,6 @@ function worktrees(ctx) {
 // A slot also carries a mark in its own folder under .git/worktrees, which goes when the
 // worktree goes. The lock can be lifted by others — `git worktree unlock`, a tool that clears
 // locks it did not write — and the mark is what still tells a slot from a lookalike then.
-const SLOT_MARK = 'claudius-slot';
-
-function adminDir(path) {
-  try {
-    const match = readFileSync(join(path, '.git'), 'utf8').match(/^gitdir:\s*(.+?)\s*$/m);
-    return match ? resolve(path, match[1]) : null;
-  } catch {
-    return null;
-  }
-}
-
 const marked = (wt) => {
   const dir = adminDir(wt.path);
   return dir !== null && existsSync(join(dir, SLOT_MARK));
@@ -268,7 +263,7 @@ const slotNumber = (ctx, name) => Number(name.match(ctx.slotName)[1]);
 
 function slots(ctx) {
   return worktrees(ctx)
-    .filter((wt) => isSlot(ctx, wt))
+    .filter((wt) => !wt.missing && isSlot(ctx, wt))
     .map((wt) => ({ ...wt, name: basename(wt.path) }))
     .sort((a, b) => slotNumber(ctx, a.name) - slotNumber(ctx, b.name));
 }
@@ -449,6 +444,9 @@ function prepare(ctx, slot) {
 function slotHoldingBranch(ctx, branch) {
   const holder = worktrees(ctx).slice(1).find((wt) => wt.branch === branch);
   if (!holder) return null;
+  if (holder.missing) {
+    throw new Refusal(`${branch} is still registered to ${holder.path}, whose folder is gone. Run git worktree prune in ${ctx.main}, then take it again.`);
+  }
   if (!isSlot(ctx, holder)) {
     throw new Refusal(`${branch} is checked out in ${holder.path}, outside the pool. Work there, or free it first.`);
   }
@@ -586,13 +584,6 @@ function sessionEnd(ctx, sessionId) {
   }
 }
 
-// git leaves a partial directory behind when it cannot delete something — on Windows,
-// typically a dependency path past 260 characters. Node removes those; git already has.
-function removeWorktree(ctx, path) {
-  git(ctx.main, 'worktree', 'remove', path);
-  if (existsSync(path)) rmSync(path, { recursive: true, force: true, maxRetries: 3 });
-}
-
 // One GitHub query for every branch instead of one per worktree. Without gh the PR
 // column stays empty and sweep does nothing, which is the safe failure.
 //
@@ -701,6 +692,17 @@ function status(ctx) {
   const prs = pullRequestsByBranch(ctx);
   const rows = worktrees(ctx).slice(1).map((wt) => {
     const name = basename(wt.path);
+    if (wt.missing) {
+      return {
+        worktree: `(gone) ${relative(ctx.main, wt.path) || wt.path}`,
+        state: 'missing — git worktree prune',
+        branch: wt.branch ?? '(detached)',
+        changes: '',
+        unpushed: '',
+        pr: '',
+        since: '',
+      };
+    }
     const slot = isSlot(ctx, wt);
     const claim = slot ? readClaim(ctx, name) : null;
     const pr = wt.branch ? prs.get(wt.branch) : null;
@@ -721,8 +723,14 @@ function status(ctx) {
 function sweep(ctx, { yes = false } = {}) {
   const prs = pullRequestsByBranch(ctx);
   let planned = 0;
+  let gone = 0;
   for (const wt of worktrees(ctx).slice(1)) {
     const name = basename(wt.path);
+    if (wt.missing) {
+      gone++;
+      log(`GONE ${name} (${wt.branch ?? 'detached'}): its folder no longer exists — ${yes ? 'pruned unless locked' : 'git worktree prune drops the entry'}.`);
+      continue;
+    }
     const slot = isSlot(ctx, wt);
     const claim = slot ? readClaim(ctx, name) : null;
     const pr = wt.branch ? prs.get(wt.branch) : null;
@@ -732,6 +740,13 @@ function sweep(ctx, { yes = false } = {}) {
     if (!slot && wt.locked) continue; // someone's live session — Claude Code locks those
     const coverage = pr?.state === 'MERGED' ? mergedCoverage(ctx, pr, wt.branch) : null;
     const merged = coverage === 'covers';
+    // Another tool's worktree — Claude Code's, an IDE's — is listed, never removed: that
+    // tool keeps its own record of it, and a folder deleted underneath it leaves the tool
+    // pointing at nothing.
+    if (!slot) {
+      if (merged) log(`LEAVE ${name} (${wt.branch}, PR ${pr.number} merged): not a slot of this pool — remove it with the tool that created it.`);
+      continue;
+    }
     if (coverage && !merged && !orphaned) {
       log(coverage === 'unfetched'
         ? `SKIP ${name} (${wt.branch}, PR ${pr.number} merged): its head is not in this clone — git fetch origin, then sweep again.`
@@ -747,11 +762,10 @@ function sweep(ctx, { yes = false } = {}) {
       continue;
     }
     planned++;
-    log(`${yes ? '' : '[dry run] '}${slot ? 'release slot' : 'remove worktree'} ${name} — ${wt.branch ?? 'detached'}, ${why}`);
+    log(`${yes ? '' : '[dry run] '}release slot ${name} — ${wt.branch ?? 'detached'}, ${why}`);
     if (!yes) continue;
     try {
-      if (slot) freeSlot(ctx, { ...wt, name });
-      else removeWorktree(ctx, wt.path);
+      freeSlot(ctx, { ...wt, name });
       // Squash merges leave the branch "unmerged" to git although its content is upstream.
       if (merged) git(ctx.main, 'branch', '-D', wt.branch);
     } catch (error) {
@@ -759,7 +773,7 @@ function sweep(ctx, { yes = false } = {}) {
     }
   }
   if (yes) git(ctx.main, 'worktree', 'prune');
-  if (planned === 0) log('Nothing to sweep.');
+  if (planned === 0 && gone === 0) log('Nothing to sweep.');
   else if (!yes) log('\nNothing changed. Run with --yes to apply.');
 }
 

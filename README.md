@@ -114,7 +114,7 @@ node bin/workspace.mjs release            # refuses unpushed work
 node bin/workspace.mjs init [--dry-run]   # propose a config from the repository, then write it
 node bin/workspace.mjs mode branches      # or: mode worktrees · mode off · no argument shows the mode
 node bin/workspace.mjs                    # status, with pull requests
-node bin/workspace.mjs sweep [--yes]      # free / remove what has merged or been abandoned
+node bin/workspace.mjs sweep [--yes]      # free slots that have merged or been abandoned
 ```
 
 Everything project-specific — mode, folders, base branch, protected paths and branches, what survives between tasks, which files to copy and which install steps to run when a lockfile changes — lives in the private `workspace.json`, so the repository itself gains nothing. The config names the main tree it belongs to (`"main"`), because its folder is named only after the repository's: a cloned repository with the same folder name is refused rather than handed your `prepare` steps. An older config without `"main"` and is ignored until you add it — the session notice says exactly what to add.

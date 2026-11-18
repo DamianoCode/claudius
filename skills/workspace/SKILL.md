@@ -34,7 +34,7 @@ The edit guard refuses protected paths while the checkout sits on a protected br
 
 `release` refuses while anything is uncommitted or unpushed. In worktrees mode `release --force` discards that work — the user's call, never a way past the refusal; branches mode has no override. A released branch stays, so an open pull request resumes with `take <same-branch>`.
 
-`status` shows the mode, every slot and worktree with its pull request. `sweep` lists slots and old worktrees whose pull request has merged or whose session has ended; `sweep --yes` frees and removes them. Removing is the user's call — show the dry run first.
+`status` shows the mode, every slot and worktree with its pull request. `sweep` lists slots whose pull request has merged or whose session has ended; `sweep --yes` frees them. Worktrees the pool did not create — Claude Code's own, an IDE's such as Orca's — are only listed (`LEAVE`), never removed: the tool that made them cleans them up. Entries whose folder is gone show as `GONE`; `sweep --yes` prunes them. Freeing is the user's call — show the dry run first.
 
 `mode` prints the current mode; `mode worktrees` / `mode branches` / `mode off` switches it in the private config. Switch only when the user asks.
 
