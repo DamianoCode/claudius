@@ -3,13 +3,43 @@
 // and — in branch mode — which branches must not be edited directly.
 
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { canonical, overlayDir } from './repo.mjs';
 
 export const WORKSPACE_CLI = fileURLToPath(new URL('../../bin/workspace.mjs', import.meta.url));
 export const MODES = ['worktrees', 'branches', 'off'];
+
+// How a pool slot is told apart from any other linked worktree — Claude Code's own, an
+// IDE's, a hand-made one. The pool locks its slots with this reason, and also leaves a mark
+// in the slot's folder under .git/worktrees, which still holds once someone lifts the lock.
+export const LOCK_REASON = 'claudius worktree pool';
+export const SLOT_MARK = 'claudius-slot';
+
+// The worktree's own folder under <main>/.git/worktrees, read from its .git file.
+export function adminDir(worktreePath) {
+  try {
+    const match = readFileSync(join(worktreePath, '.git'), 'utf8').match(/^gitdir:\s*(.+?)\s*$/m);
+    return match ? resolve(worktreePath, match[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+// True for a slot of the pool: the pool's lock, or the pool's mark and no other lock.
+// Reads files only, so the hooks can ask it without spawning git.
+export function isPoolSlot(worktreePath) {
+  const dir = adminDir(worktreePath);
+  if (dir === null) return false;
+  let lock = null;
+  try {
+    lock = readFileSync(join(dir, 'locked'), 'utf8').trim();
+  } catch {
+    /* not locked */
+  }
+  return lock === null ? existsSync(join(dir, SLOT_MARK)) : lock === LOCK_REASON;
+}
 
 export const configPath = (mainTree) => join(overlayDir(mainTree), 'workspace.json');
 

@@ -8,7 +8,7 @@ import { basename } from 'node:path';
 
 import { locateRepo } from './lib/repo.mjs';
 import {
-  bindingLine, configPath, currentBranch, hasUnboundConfig, readWorkspaceConfig, workspaceCommand,
+  bindingLine, configPath, currentBranch, hasUnboundConfig, isPoolSlot, readWorkspaceConfig, workspaceCommand,
 } from './lib/workspace.mjs';
 
 let cwd = process.cwd();
@@ -35,7 +35,13 @@ if (!config) {
 
 const name = basename(repo.main);
 let line;
-if (repo.linked) {
+if (repo.linked && !isPoolSlot(repo.worktree)) {
+  // Claude Code's own worktree, an IDE's, a hand-made one: the pool neither made it nor
+  // frees it, so release would only refuse here.
+  line =
+    `This session runs in the worktree ${basename(repo.worktree)} of ${name}, which is not a slot of its pool. ` +
+    'Work here as usual; the tool that created it also cleans it up.';
+} else if (repo.linked) {
   line =
     `This session runs in the worktree ${basename(repo.worktree)} of ${name}. ` +
     `When its work is pushed, free it with: ${workspaceCommand('release')}, then ExitWorktree (action: keep).`;
