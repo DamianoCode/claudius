@@ -11,6 +11,22 @@ import { canonical, overlayDir } from './repo.mjs';
 export const WORKSPACE_CLI = fileURLToPath(new URL('../../bin/workspace.mjs', import.meta.url));
 export const MODES = ['worktrees', 'branches', 'off'];
 
+// Who creates the worktrees in worktrees mode: the pool's own slots, or Orca — the desktop
+// app that manages worktrees itself, so its sidebar, terminals and cleanup rules see them.
+// "auto" asks the session: one started by Orca uses Orca, the CLI and Claude Desktop use the
+// pool. Orca marks the sessions it starts in their environment.
+export const PROVIDERS = ['pool', 'orca', 'auto'];
+
+export const inOrcaSession = (env = process.env) =>
+  env.CLAUDE_CODE_ENTRYPOINT === 'orca' || Boolean(env.ORCA_AGENT_SESSION_ID);
+
+// 'pool' | 'orca' — what "auto" resolves to in this session; an unknown value is the pool.
+export function activeProvider(config, env = process.env) {
+  const setting = config?.provider ?? 'pool';
+  if (setting === 'auto') return inOrcaSession(env) ? 'orca' : 'pool';
+  return setting === 'orca' ? 'orca' : 'pool';
+}
+
 // How a pool slot is told apart from any other linked worktree — Claude Code's own, an
 // IDE's, a hand-made one. The pool locks its slots with this reason, and also leaves a mark
 // in the slot's folder under .git/worktrees, which still holds once someone lifts the lock.

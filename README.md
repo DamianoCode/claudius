@@ -115,11 +115,15 @@ node bin/workspace.mjs init [--dry-run]   # propose a config from the repository
 node bin/workspace.mjs mode branches      # or: mode worktrees · mode off · no argument shows the mode
 node bin/workspace.mjs                    # status, with pull requests
 node bin/workspace.mjs sweep [--yes]      # free slots that have merged or been abandoned
+node bin/workspace.mjs provider auto      # who makes worktrees: pool · orca · auto (Orca in Orca sessions)
+node bin/workspace.mjs prepare            # inside a worktree: copy and prepare steps, e.g. as Orca's setup line
 ```
 
 Everything project-specific — mode, folders, base branch, protected paths and branches, what survives between tasks, which files to copy and which install steps to run when a lockfile changes — lives in the private `workspace.json`, so the repository itself gains nothing. The config names the main tree it belongs to (`"main"`), because its folder is named only after the repository's: a cloned repository with the same folder name is refused rather than handed your `prepare` steps. An older config without `"main"` and is ignored until you add it — the session notice says exactly what to add.
 
 **Opt-in, never imposed.** Without a `workspace.json` nothing changes: the hooks stay silent, the CLI refuses to act and the skill does not suggest itself, so a repository with its own worktree scripts or branch habits keeps them. `node bin/workspace.mjs init` proposes a config from the repository — base branch, where existing worktrees already live, code folders, caches, env files, the install step — with the reason for each value, and writes it only when asked (`--dry-run` to look first). `mode off` pauses a configured repository without deleting anything; `CLAUDIUS_WORKSPACE=off` switches the feature off everywhere.
+
+**Orca as the worktree owner.** `"provider": "orca"` hands worktree creation to the [Orca](https://github.com/stablyai/orca) desktop app: `take` runs `orca worktree create` from the configured base, then the same `copy` and `prepare` steps, and `sweep --yes` removes merged worktrees through Orca, so its sidebar, terminals and cleanup rules stay in step. `"provider": "auto"` uses Orca only in sessions Orca started and the pool everywhere else. The edit guard, `status` and the session notice work the same with either provider.
 
 How the worktrees mode fits Claude Code rather than working around it:
 

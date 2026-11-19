@@ -16,7 +16,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 
 import { locateRepo } from './lib/repo.mjs';
 import {
-  currentBranch, matchesAny, protectedBranches, readWorkspaceConfig, workspaceCommand,
+  activeProvider, currentBranch, matchesAny, protectedBranches, readWorkspaceConfig, workspaceCommand,
 } from './lib/workspace.mjs';
 
 const allow = () => process.exit(0);
@@ -56,6 +56,12 @@ if (config.mode === 'branches') {
     `${rel} would be edited on ${branch ?? 'a detached HEAD'}, which this repository keeps free of direct work. ` +
     `Start a branch first: ${workspaceCommand('take <branch-name>')} — it switches this checkout — then make the edit. ` +
     `When the work is pushed: ${workspaceCommand('release')}.`;
+} else if (activeProvider(config) === 'orca') {
+  reason =
+    `${rel} is in the main working tree, which this repository keeps free of edits (protected: ${protect.join(', ')}). ` +
+    `Create an Orca worktree: ${workspaceCommand('take <branch-name>')} — it runs orca worktree create and prints the path last; ` +
+    `then switch into it with the EnterWorktree tool (path: that worktree) and make the same edit there. ` +
+    `It stays until its pull request merges; ${workspaceCommand('sweep')} or Orca's cleanup removes it then.`;
 } else {
   reason =
     `${rel} is in the main working tree, which this repository keeps free of edits (protected: ${protect.join(', ')}). ` +
