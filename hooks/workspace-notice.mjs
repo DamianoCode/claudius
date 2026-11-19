@@ -8,7 +8,8 @@ import { basename } from 'node:path';
 
 import { locateRepo } from './lib/repo.mjs';
 import {
-  bindingLine, configPath, currentBranch, hasUnboundConfig, isPoolSlot, readWorkspaceConfig, workspaceCommand,
+  activeProvider, bindingLine, configPath, currentBranch, hasUnboundConfig, isPoolSlot, readWorkspaceConfig,
+  workspaceCommand,
 } from './lib/workspace.mjs';
 
 let cwd = process.cwd();
@@ -34,8 +35,13 @@ if (!config) {
 }
 
 const name = basename(repo.main);
+const orca = config.mode === 'worktrees' && activeProvider(config) === 'orca';
 let line;
-if (repo.linked && !isPoolSlot(repo.worktree)) {
+if (repo.linked && orca && !isPoolSlot(repo.worktree)) {
+  line =
+    `This session runs in the worktree ${basename(repo.worktree)} of ${name}. Work here as usual; ` +
+    `it stays until its pull request merges, then ${workspaceCommand('sweep')} or Orca's cleanup removes it.`;
+} else if (repo.linked && !isPoolSlot(repo.worktree)) {
   // Claude Code's own worktree, an IDE's, a hand-made one: the pool neither made it nor
   // frees it, so release would only refuse here.
   line =
@@ -50,6 +56,12 @@ if (repo.linked && !isPoolSlot(repo.worktree)) {
     `${name} works on branches in this checkout (currently ${currentBranch(repo.main) ?? 'detached'}). ` +
     `Before changing code: ${workspaceCommand('take <branch-name>')}; when pushed: ${workspaceCommand('release')}. ` +
     `Parallel sessions share this checkout — switch to worktrees mode for them: ${workspaceCommand('mode worktrees')}`;
+} else if (orca) {
+  line =
+    `${name} works in Orca worktrees; code is not edited in the main tree. ` +
+    `Before changing code: ${workspaceCommand('take <branch-name>')} — it creates the worktree through Orca — ` +
+    `then switch into the printed path with the EnterWorktree tool (path: …). ` +
+    `Status: ${workspaceCommand('status')}`;
 } else {
   line =
     `${name} uses a worktree pool; code is not edited in the main tree. ` +

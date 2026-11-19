@@ -47,7 +47,10 @@ function world(boundary, config) {
   git(main, 'push', '-q', 'origin', 'HEAD:main');
 
   // No session of the test runner's own Claude Code may leak into a claim.
-  const env = envWith(envWithHome(home), envNoRepoAbove(boundary), { CLAUDE_CODE_SESSION_ID: '', CLAUDE_PID: '' });
+  // Nor may the runner's own Orca session decide what "auto" means.
+  const env = envWith(envWithHome(home), envNoRepoAbove(boundary), {
+    CLAUDE_CODE_SESSION_ID: '', CLAUDE_PID: '', CLAUDE_CODE_ENTRYPOINT: '', ORCA_AGENT_SESSION_ID: '',
+  });
   if (config) writePool(home, main, { base: 'origin/main', ...config });
   return { home, main, pool: join(boundary, 'main-worktrees'), env };
 }
@@ -1032,5 +1035,338 @@ test('copy never writes through a target that is itself a link, even a dangling 
 
     assert.equal(slot(w, ['take', 'feat/b']).status, 0);
     assert.ok(!existsSync(join(outside, 'gone')), 'nothing may be created where the link points');
+  });
+});
+
+// --- provider: Orca ---------------------------------------------------------------
+
+// A stand-in for Orca's CLI with the behaviour take relies on, as the real one shows it:
+// `worktree create` makes a worktree under FAKE_ORCA_BASE without an upstream and starts a
+// suffixed branch from the base when the branch it is given already exists; `list` returns
+// every worktree of the repository, and only the ones it created carry a creatorProvenance.
+const FAKE_ORCA = String.raw`
+const { execFileSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const args = global.FAKE_ARGS ?? process.argv.slice(2);
+const opt = (name) => args[args.indexOf(name) + 1];
+const base = fs.realpathSync.native(process.env.FAKE_ORCA_BASE);
+fs.appendFileSync(process.env.FAKE_ORCA_LOG, JSON.stringify(args) + '\n');
+const git = (...a) => execFileSync('git', a, { cwd: process.cwd(), encoding: 'utf8' }).trim();
+const out = (result) => { process.stdout.write(JSON.stringify({ ok: true, result })); process.exit(0); };
+if (args[0] === 'worktree' && args[1] === 'create') {
+  let folder = path.join(base, opt('--name'));
+  if (fs.existsSync(folder)) folder += '-2';
+  let branch = opt('--branch');
+  try { git('show-ref', '--verify', '--quiet', 'refs/heads/' + branch); branch += '-2'; } catch {}
+  git('worktree', 'add', '-q', '--no-track', '-b', branch, folder, opt('--base-branch'));
+  fs.appendFileSync(process.env.FAKE_ORCA_LOG + '.made', fs.realpathSync.native(folder) + '\n');
+  out({ worktree: { path: folder.split(path.sep).join('/'), branch: 'refs/heads/' + branch } });
+}
+if (args[0] === 'worktree' && args[1] === 'list') {
+  const made = fs.existsSync(process.env.FAKE_ORCA_LOG + '.made')
+    ? fs.readFileSync(process.env.FAKE_ORCA_LOG + '.made', 'utf8').split('\n').filter(Boolean) : [];
+  const paths = git('worktree', 'list', '--porcelain').split(/\r?\n/)
+    .filter((line) => line.startsWith('worktree ')).map((line) => line.slice(9));
+  const ours = (p) => fs.existsSync(p) && made.includes(fs.realpathSync.native(p));
+  out({ worktrees: paths.map((p, i) => ({
+    path: p, isMainWorktree: i === 0, creatorProvenance: ours(p) ? { kind: 'host' } : false,
+  })) });
+}
+if (args[0] === 'worktree' && args[1] === 'rm') {
+  git('worktree', 'remove', opt('--worktree').slice('path:'.length));
+  out({});
+}
+process.stdout.write(JSON.stringify({ ok: false, error: { message: 'fake orca: unknown ' + args.join(' ') } }));
+process.exit(1);
+`;
+
+const FAKE_GH = String.raw`
+const fs = require('fs');
+process.stdout.write(fs.readFileSync(process.env.FAKE_GH_PRS, 'utf8'));
+process.exit(0);
+`;
+
+// gh and orca stand-ins in one folder on PATH: scripts elsewhere, copies of node with one
+// preload on Windows (see fakeGh). There node takes the first argument for a script path
+// and resolves it, so the preload hands the script its arguments before node gets to them.
+function fakeTools(dir, env, prs = []) {
+  const bin = join(dir, 'fake-tools');
+  mkdirSync(bin);
+  const base = join(dir, 'orca-workspaces');
+  mkdirSync(base);
+  const log = join(dir, 'orca.log');
+  writeFileSync(log, '');
+  const prsFile = join(dir, 'prs.json');
+  writeFileSync(prsFile, JSON.stringify(prs));
+  const scripts = {};
+  for (const [name, source] of Object.entries({ orca: FAKE_ORCA, gh: FAKE_GH })) {
+    scripts[name] = join(dir, `fake-${name}.cjs`);
+    writeFileSync(scripts[name], source);
+  }
+  const pathKey = Object.keys(env).find((key) => key.toUpperCase() === 'PATH') ?? 'PATH';
+  const extra = { [pathKey]: `${bin}${delimiter}${env[pathKey] ?? ''}`, FAKE_ORCA_BASE: base, FAKE_ORCA_LOG: log, FAKE_GH_PRS: prsFile };
+  if (process.platform !== 'win32') {
+    for (const [name, script] of Object.entries(scripts)) {
+      writeFileSync(join(bin, name), `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`, { mode: 0o755 });
+    }
+    return { env: extra, base, log };
+  }
+  const byExe = {};
+  for (const [name, script] of Object.entries(scripts)) {
+    copyFileSync(process.execPath, join(bin, `${name}.exe`));
+    byExe[`${name}.exe`] = script;
+  }
+  const preload = join(dir, 'fake-tools.cjs').replaceAll('\\', '/');
+  writeFileSync(preload, [
+    "const path = require('path');",
+    `const script = ${JSON.stringify(byExe)}[path.basename(process.execPath).toLowerCase()];`,
+    'if (script) {',
+    '  global.FAKE_ARGS = process.argv.length > 1 ? [path.basename(process.argv[1]), ...process.argv.slice(2)] : [];',
+    '  require(script);',
+    '}',
+    '',
+  ].join('\n'));
+  return { env: { ...extra, NODE_OPTIONS: `--require "${preload}"` }, base, log };
+}
+
+const orcaCalls = (tools) => readFileSync(tools.log, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
+
+test('provider orca: take creates the worktree through Orca from the base, prepares it, and resumes it', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const marker = join(boundary, 'prepared.log').replaceAll('\\', '/');
+    const w = world(boundary, {
+      provider: 'orca',
+      orca: { repo: 'name:Main' },
+      copy: ['.env.local'],
+      prepare: [{ when: ['package.json'], run: `node -e "require('fs').appendFileSync('${marker}','x')"` }],
+    });
+    writeFileSync(join(w.main, '.env.local'), 'SECRET=1\n');
+    const tools = fakeTools(boundary, w.env);
+
+    const result = slot(w, ['take', 'feat/it-1181-gabaryty-skrytek'], w.main, { env: tools.env });
+    assert.equal(result.status, 0, result.stderr);
+    const path = lastLine(result.stdout);
+    assert.equal(canonical(path), canonical(join(tools.base, 'it-1181-gabaryty-skrytek')), 'the folder drops the type prefix');
+    assert.equal(git(path, 'branch', '--show-current'), 'feat/it-1181-gabaryty-skrytek');
+    assert.equal(readFileSync(join(path, '.env.local'), 'utf8'), 'SECRET=1\n');
+    assert.equal(readFileSync(marker, 'utf8'), 'x');
+    assert.ok(!existsSync(w.pool), 'no pool slot is made');
+
+    const [create] = orcaCalls(tools);
+    assert.deepEqual(create.slice(0, 2), ['worktree', 'create']);
+    for (const [flag, value] of [['--repo', 'name:Main'], ['--base-branch', 'origin/main'], ['--setup', 'skip']]) {
+      assert.equal(create[create.indexOf(flag) + 1], value, flag);
+    }
+
+    const again = slot(w, ['take', 'feat/it-1181-gabaryty-skrytek'], w.main, { env: tools.env });
+    assert.equal(again.status, 0, again.stderr);
+    assert.equal(lastLine(again.stdout), path);
+    assert.match(again.stderr, /resuming/);
+    assert.equal(orcaCalls(tools).filter((call) => call[1] === 'create').length, 1, 'resuming creates nothing');
+    assert.equal(readFileSync(marker, 'utf8'), 'x', 'an unchanged lockfile is not prepared twice');
+  });
+});
+
+test('provider orca: an existing branch is reopened as it is, not started again under a suffix', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, { provider: 'orca' });
+    git(w.main, 'switch', '-q', '-c', 'feat/review');
+    writeFileSync(join(w.main, 'review.txt'), 'work under review');
+    git(w.main, 'add', '.');
+    git(w.main, 'commit', '-qm', 'review');
+    git(w.main, 'push', '-q', 'origin', 'feat/review');
+    const head = git(w.main, 'rev-parse', 'HEAD');
+    git(w.main, 'switch', '-q', 'main');
+    git(w.main, 'branch', '-q', '-D', 'feat/review');
+    const tools = fakeTools(boundary, w.env);
+
+    const result = slot(w, ['take', 'feat/review'], w.main, { env: tools.env });
+    assert.equal(result.status, 0, result.stderr);
+    const path = lastLine(result.stdout);
+    assert.equal(git(path, 'branch', '--show-current'), 'feat/review');
+    assert.equal(git(path, 'rev-parse', 'HEAD'), head);
+    assert.equal(git(path, 'rev-parse', '--abbrev-ref', '@{u}'), 'origin/feat/review');
+    const branches = git(w.main, 'branch', '--format=%(refname:short)').split(/\r?\n/);
+    assert.ok(!branches.some((b) => b.startsWith('claudius-tmp/')), `the placeholder branch is gone: ${branches}`);
+  });
+});
+
+test('provider auto: a session Orca started uses Orca, any other uses the pool', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, { provider: 'auto' });
+    const tools = fakeTools(boundary, w.env);
+
+    const cli = slot(w, ['take', 'feat/cli'], w.main, { env: tools.env });
+    assert.equal(cli.status, 0, cli.stderr);
+    assert.equal(lastLine(cli.stdout), join(w.pool, 'slot-1'));
+
+    const inOrca = slot(w, ['take', 'feat/orca'], w.main, { env: { ...tools.env, CLAUDE_CODE_ENTRYPOINT: 'orca' } });
+    assert.equal(inOrca.status, 0, inOrca.stderr);
+    assert.equal(canonical(lastLine(inOrca.stdout)), canonical(join(tools.base, 'orca')));
+
+    const status = slot(w, ['status'], w.main, { env: { ...tools.env, ORCA_AGENT_SESSION_ID: 'x' } });
+    assert.equal(status.status, 0, status.stderr);
+    assert.match(status.stderr, /provider auto → orca/);
+    assert.match(status.stdout, /\(orca\) orca/);
+    assert.match(status.stdout, /slot-1/);
+  });
+});
+
+test('provider shows and switches who creates worktrees, and refuses nonsense', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, {});
+    assert.match(slot(w, ['provider']).stderr, /Provider: pool/);
+    assert.equal(slot(w, ['provider', 'auto']).status, 0);
+    const config = JSON.parse(readFileSync(join(w.home, '.claude', 'context', basename(w.main), 'workspace.json'), 'utf8'));
+    assert.equal(config.provider, 'auto');
+    assert.equal(config.base, 'origin/main', 'the rest of the config is kept');
+    assert.equal(slot(w, ['provider', 'docker']).status, 2);
+  });
+});
+
+test('provider orca: the guard and the notice send the session to an Orca worktree', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, { provider: 'auto', protect: ['apps/'] });
+    const orcaEnv = { ...w.env, CLAUDE_CODE_ENTRYPOINT: 'orca' };
+    const file = join(w.main, 'apps', 'a.js');
+
+    assert.match(denial(runHook('guard-main-tree.mjs', edit(file), { env: orcaEnv })), /Orca worktree: .*take <branch-name>/);
+    assert.match(denial(runHook('guard-main-tree.mjs', edit(file), { env: w.env })), /Claim a worktree slot/);
+    assert.match(runHook('workspace-notice.mjs', { cwd: w.main }, { env: orcaEnv }).stdout, /works in Orca worktrees/);
+    assert.match(runHook('workspace-notice.mjs', { cwd: w.main }, { env: w.env }).stdout, /uses a worktree pool/);
+
+    const tools = fakeTools(boundary, w.env);
+    const path = lastLine(slot(w, ['take', 'feat/x'], w.main, { env: { ...tools.env, CLAUDE_CODE_ENTRYPOINT: 'orca' } }).stdout);
+    assert.equal(denial(runHook('guard-main-tree.mjs', edit(join(path, 'apps', 'a.js')), { env: orcaEnv })), null);
+    assert.match(runHook('workspace-notice.mjs', { cwd: path }, { env: orcaEnv }).stdout, /stays until its pull request merges/);
+  });
+});
+
+test('provider orca: release checks the worktree is pushed and frees nothing', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, { provider: 'orca' });
+    const tools = fakeTools(boundary, w.env);
+    const path = lastLine(slot(w, ['take', 'feat/x'], w.main, { env: tools.env }).stdout);
+    writeFileSync(join(path, 'x.txt'), 'x');
+    git(path, 'add', '.');
+    git(path, 'commit', '-qm', 'x');
+
+    const refused = slot(w, ['release'], path, { env: tools.env });
+    assert.equal(refused.status, 2);
+    assert.match(refused.stderr, /unpushed/);
+
+    git(path, 'push', '-q', '-u', 'origin', 'feat/x');
+    const released = slot(w, ['release'], path, { env: tools.env });
+    assert.equal(released.status, 0, released.stderr);
+    assert.match(released.stderr, /nothing is freed/);
+    assert.equal(git(path, 'branch', '--show-current'), 'feat/x');
+  });
+});
+
+test('provider orca: sweep removes a merged Orca worktree through Orca and leaves the rest', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, { provider: 'orca' });
+    const tools = fakeTools(boundary, w.env);
+    const made = (branch) => {
+      const path = lastLine(slot(w, ['take', branch], w.main, { env: tools.env }).stdout);
+      writeFileSync(join(path, 'x.txt'), branch);
+      git(path, 'add', '.');
+      git(path, 'commit', '-qm', branch);
+      git(path, 'push', '-q', '-u', 'origin', branch);
+      return path;
+    };
+    const done = made('feat/done');
+    const dirty = made('feat/dirty');
+    writeFileSync(join(dirty, 'wip.txt'), 'not committed');
+    const ide = join(boundary, 'ide-task');
+    git(w.main, 'worktree', 'add', '-q', '-b', 'feat/ide', ide, 'origin/main');
+    writeFileSync(tools.env.FAKE_GH_PRS, JSON.stringify(['feat/done', 'feat/dirty', 'feat/ide'].map((branch, i) => ({
+      headRefName: branch, headRefOid: git(w.main, 'rev-parse', branch), isCrossRepository: false, number: i + 1, state: 'MERGED',
+    }))));
+
+    const dry = slot(w, ['sweep'], w.main, { env: tools.env });
+    assert.equal(dry.status, 0, dry.stderr);
+    assert.match(dry.stderr, /\[dry run\] remove Orca worktree done/);
+    assert.match(dry.stderr, /SKIP dirty .*uncommitted/);
+    assert.match(dry.stderr, /LEAVE ide-task/);
+    assert.ok(existsSync(done));
+
+    const result = slot(w, ['sweep', '--yes'], w.main, { env: tools.env });
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(!existsSync(done), 'the merged Orca worktree is removed');
+    assert.ok(orcaCalls(tools).some((call) => call[1] === 'rm'), 'through Orca, so its record goes too');
+    assert.ok(existsSync(join(dirty, 'wip.txt')) && existsSync(ide));
+    const branches = git(w.main, 'branch', '--format=%(refname:short)').split(/\r?\n/);
+    assert.ok(!branches.includes('feat/done') && branches.includes('feat/dirty') && branches.includes('feat/ide'));
+  });
+});
+
+test('prepare runs the steps in the worktree it is called from, and a new worktree of the same name starts fresh', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const marker = join(boundary, 'prepared.log').replaceAll('\\', '/');
+    const w = world(boundary, {
+      copy: ['.env.local'],
+      prepare: [{ when: ['package.json'], run: `node -e "require('fs').appendFileSync('${marker}','x')"` }],
+    });
+    writeFileSync(join(w.main, '.env.local'), 'SECRET=1\n');
+    const uiMade = join(boundary, 'ui-task');
+    git(w.main, 'worktree', 'add', '-q', '-b', 'feat/ui', uiMade, 'origin/main');
+
+    assert.equal(slot(w, ['prepare'], uiMade).status, 0);
+    assert.equal(slot(w, ['prepare'], uiMade).status, 0);
+    assert.equal(readFileSync(marker, 'utf8'), 'x', 'the second run finds nothing changed');
+    assert.equal(readFileSync(join(uiMade, '.env.local'), 'utf8'), 'SECRET=1\n');
+
+    git(w.main, 'worktree', 'remove', '--force', uiMade);
+    git(w.main, 'worktree', 'add', '-q', '-b', 'feat/ui-2', uiMade, 'origin/main');
+    assert.equal(slot(w, ['prepare'], uiMade).status, 0);
+    assert.equal(readFileSync(marker, 'utf8'), 'xx', 'a new worktree in the same folder is prepared again');
+
+    assert.equal(slot(w, ['prepare'], w.main).status, 2, 'the main tree is the source, not a target');
+  });
+});
+
+test('provider orca without the Orca CLI refuses and names the ways out', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, { provider: 'orca', orca: { cli: join(boundary, 'no-such-orca') } });
+    const result = slot(w, ['take', 'feat/x']);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /Orca CLI .* was not found.*provider pool/);
+    assert.equal(git(w.main, 'branch', '--list', 'feat/x'), '');
+  });
+});
+
+test('provider orca: a branch out in a worktree Orca did not make is refused, not prepared underneath it', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const marker = join(boundary, 'prepared.log').replaceAll('\\', '/');
+    const w = world(boundary, {
+      provider: 'orca',
+      prepare: [{ run: `node -e "require('fs').appendFileSync('${marker}','x')"` }],
+    });
+    const tools = fakeTools(boundary, w.env);
+    const hand = join(tools.base, 'hand-made');
+    git(w.main, 'worktree', 'add', '-q', '-b', 'feat/hand', hand, 'origin/main');
+
+    const result = slot(w, ['take', 'feat/hand'], w.main, { env: tools.env });
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /which Orca did not make/);
+    assert.ok(!existsSync(marker), 'nothing ran in it');
+
+    const status = slot(w, ['status'], w.main, { env: tools.env });
+    assert.match(status.stdout, /\(other\)/);
+    assert.doesNotMatch(status.stdout, /\(orca\)/);
+  });
+});
+
+test('a mistyped provider is reported by every command, fixed by provider, and never stops session-end', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, { provider: 'orac' });
+    const result = slot(w, ['status']);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /Unknown provider "orac"/);
+    assert.equal(slot(w, ['session-end'], w.main, { input: JSON.stringify({ cwd: w.main, session_id: 's' }) }).status, 0);
+    assert.equal(slot(w, ['provider', 'auto']).status, 0);
+    assert.equal(slot(w, ['status']).status, 0);
   });
 });

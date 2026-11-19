@@ -11,6 +11,12 @@
 //               same prepare steps run when the lockfile moves. Right for a single session
 //               at a time; parallel sessions would share the checkout.
 //
+// In worktrees mode, "provider" says who makes the worktrees: "pool" (the slots below),
+// "orca" (the Orca desktop app, through its CLI, so its sidebar and cleanup rules own them),
+// or "auto" — Orca for a session Orca started, the pool for the CLI and Claude Desktop.
+// With Orca, `take` creates a worktree per branch through `orca worktree create`, then runs
+// the same copy and prepare steps; the edit guard, status and sweep work as with the pool.
+//
 // Slots live beside the repository by default, in ../<repo>-worktrees/<prefix>-N: nothing
 // appears inside the working tree, and paths stay as short as the repository's own.
 // A session moves into a slot with Claude Code's EnterWorktree, which asks once per entry
@@ -32,6 +38,10 @@
 //     "main": "/path/to/my-repo",       the main tree this config belongs to — the folder above
 //                                       is named only after its basename, which a clone chooses
 //     "mode": "worktrees",              or "branches", or "off"; switch with `workspace.mjs mode <m>`
+//     "provider": "pool",               worktrees mode: "pool", "orca" or "auto"; `workspace.mjs provider <p>`
+//     "orca": { "repo": "name:EMX",     Orca's selector for this repository (default path:<main>),
+//               "cli": "orca",          its CLI, and the longest worktree folder name
+//               "nameMax": 24 },        (folder names come from the branch; Windows paths stop at 260)
 //     "pool": "../my-repo-worktrees",   where slots live, relative to the main tree (this is the default)
 //     "prefix": "slot",                 slot folders are <prefix>-1, <prefix>-2, …
 //     "size": 5,                        most slots ever created
@@ -51,14 +61,19 @@
 //                      [--protect a/,b/] [--dry-run] [--force]
 //                                  propose a config from the repository and write it
 //   workspace.mjs                  status
-//   workspace.mjs take <branch> [--base <ref>]
-//                                  worktrees: claim a slot, last stdout line = its path
+//   workspace.mjs take <branch> [--base <ref>] [--name <folder>]
+//                                  worktrees: claim a slot (or create an Orca worktree), last stdout line = its path
 //                                  branches:  switch the main tree to the branch
 //   workspace.mjs release [<prefix>-N] [--force]
 //                                  refuses while work is uncommitted or unpushed
+//   workspace.mjs prepare          run the copy and prepare steps in the current worktree —
+//                                  the setup line for worktrees made in Orca's own window
 //   workspace.mjs mode [worktrees|branches|off]
 //                                  show or switch the mode
-//   workspace.mjs sweep [--yes]    free slots whose PR has merged or whose session has ended
+//   workspace.mjs provider [pool|orca|auto]
+//                                  show or switch who creates worktrees
+//   workspace.mjs sweep [--yes]    free slots (and remove Orca worktrees) whose PR has merged,
+//                                  free slots whose session has ended
 //   workspace.mjs session-end      SessionEnd hook: free the ending session's slots when safe
 //
 // A claim records the Claude Code session and process that made it. A slot whose
@@ -77,8 +92,8 @@ import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } fr
 
 import { canonical, locateRepo } from '../hooks/lib/repo.mjs';
 import {
-  LOCK_REASON, MODES, SLOT_MARK, adminDir, bindingLine, configBinding, configPath as workspaceConfigPath,
-  disabledEverywhere,
+  LOCK_REASON, MODES, PROVIDERS, SLOT_MARK, activeProvider, adminDir, bindingLine, configBinding,
+  configPath as workspaceConfigPath, disabledEverywhere, inOrcaSession,
 } from '../hooks/lib/workspace.mjs';
 import { detectConfig } from './lib/detect.mjs';
 
@@ -191,6 +206,15 @@ function loadContext(start) {
   if (raw.mode !== undefined && !MODES.includes(raw.mode)) {
     throw new Refusal(`Unknown mode "${raw.mode}" in ${configPath}. Use ${MODES.join(' or ')}.`);
   }
+  // A mistake in the Orca fields is reported by every command, but never stops session-end
+  // from freeing the pool's slots — the pool does not depend on them.
+  const nameMax = raw.orca?.nameMax ?? 24;
+  let configError = null;
+  if (raw.provider !== undefined && !PROVIDERS.includes(raw.provider)) {
+    configError = `Unknown provider "${raw.provider}" in ${configPath}. Use ${PROVIDERS.join(', ')}.`;
+  } else if (!Number.isInteger(nameMax) || nameMax < 8) {
+    configError = `"orca.nameMax" in ${configPath} must be a whole number of at least 8, got "${raw.orca?.nameMax}".`;
+  }
   const prefix = raw.prefix ?? 'slot';
   if (!/^[A-Za-z0-9._]+(?:-[A-Za-z0-9._]+)*$/.test(prefix)) {
     throw new Refusal(`"prefix" must be a plain folder name (letters, digits, dots, dashes), got "${prefix}".`);
@@ -208,6 +232,14 @@ function loadContext(start) {
     configPath,
     raw,
     mode: raw.mode ?? 'worktrees',
+    configError,
+    providerSetting: PROVIDERS.includes(raw.provider) ? raw.provider : 'pool',
+    provider: activeProvider(raw),
+    orca: {
+      repo: raw.orca?.repo ?? `path:${repo.main}`,
+      cli: raw.orca?.cli ?? 'orca',
+      nameMax,
+    },
     prefix,
     slotName: new RegExp(`^${prefix.replace(/\./g, '\\.')}-(\\d+)$`),
     start: canonical(start),
@@ -415,10 +447,14 @@ function fingerprint(root, patterns) {
   return hash.digest('hex');
 }
 
-function prepare(ctx, slot) {
+// A slot keeps its stamps in the pool's state folder, since it outlives every task. Any other
+// worktree keeps them in its own folder under .git/worktrees, which goes with the worktree —
+// a later worktree that happens to get the same folder name must not inherit "already done".
+const ownStamps = (path) => join(adminDir(path), 'claudius-prepared.json');
+
+function prepare(ctx, slot, stampsPath = join(ctx.state, `${slot.name}.prepared.json`)) {
   copyMissing(ctx, slot.path);
   mkdirSync(ctx.state, { recursive: true }); // branch mode never passes through the claim mutex
-  const stampsPath = join(ctx.state, `${slot.name}.prepared.json`);
   const stamps = existsSync(stampsPath) ? JSON.parse(readFileSync(stampsPath, 'utf8')) : {};
 
   for (const step of ctx.prepare) {
@@ -543,6 +579,146 @@ function take(ctx, branch, { base } = {}) {
   console.log(slot.path);
 }
 
+// --- Orca -------------------------------------------------------------------
+
+// Orca's CLI, always with --json; it answers { ok, result } or { ok: false, error }. It talks
+// to the running app, so a hung app must not hang status: a deadline, then "unavailable".
+// Creating gets longer — Orca checks out the whole tree before it answers.
+function orca(ctx, ...args) {
+  const timeout = args[1] === 'create' ? 300_000 : 20_000;
+  const result = spawnSync(ctx.orca.cli, [...args, '--json'], { cwd: ctx.main, encoding: 'utf8', timeout });
+  if (result.error?.code === 'ETIMEDOUT') throw new Error(`orca ${args.join(' ')} did not answer within ${timeout / 1000} s — is Orca running?`);
+  if (result.error?.code === 'ENOENT') {
+    throw new Refusal(
+      `The Orca CLI (${ctx.orca.cli}) was not found. Put Orca's bin folder on PATH, set "orca.cli" in ${ctx.configPath}, ` +
+        'or switch back to the pool: workspace.mjs provider pool',
+    );
+  }
+  let answer = null;
+  try {
+    answer = JSON.parse(result.stdout);
+  } catch {
+    /* not JSON — reported below */
+  }
+  if (result.status !== 0 || !answer?.ok) {
+    const why = answer?.error?.message ?? (result.stderr || result.stdout || result.error?.message || '').trim();
+    throw new Error(`orca ${args.join(' ')} failed:\n${why}`);
+  }
+  return answer.result;
+}
+
+// The worktrees Orca itself made for this repository, by canonical path → the path as Orca
+// spells it (its selectors want that spelling). Orca lists every worktree of the repository —
+// pool slots, Claude Code's, hand-made ones it imported — and only the ones it created carry
+// a creatorProvenance; nothing else may be removed through it. null when Orca cannot be
+// asked: then its worktrees are treated like any other tool's, listed and never removed.
+function orcaWorktrees(ctx) {
+  if (ctx.providerSetting === 'pool') return null;
+  try {
+    const list = orca(ctx, 'worktree', 'list', '--repo', ctx.orca.repo)?.worktrees ?? [];
+    const made = list.filter((wt) => !wt.isMainWorktree && wt.path && wt.creatorProvenance);
+    return new Map(made.map((wt) => [canonical(wt.path), wt.path]));
+  } catch (error) {
+    log(`Orca is unavailable — its worktrees are listed as other tools' (${error.message.split('\n').pop()}).`);
+    return null;
+  }
+}
+
+// feat/it-1181-gabaryty-skrytek → it-1181-gabaryty-skrytek: the type prefix only lengthens
+// every path in the worktree, and Windows stops at 260 characters.
+function folderName(branch, max) {
+  const tail = branch.includes('/') ? branch.slice(branch.indexOf('/') + 1) : branch;
+  return tail.replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, max).replace(/[-.]+$/, '') || 'work';
+}
+
+function takeOrca(ctx, branch, { base, name } = {}) {
+  if (!branch) throw new Refusal('Name the branch: take <branch-name>. An Orca worktree is made for one branch.');
+  gitOk(ctx.main, 'fetch', '--prune', '--quiet', 'origin');
+  const ref = baseRef(ctx, base);
+
+  // Resuming: git allows one checkout per branch, so a branch already out somewhere is
+  // continued there, or refused when that place is not ours to enter.
+  const holder = worktrees(ctx).find((wt) => wt.branch === branch);
+  if (holder?.path === ctx.main) {
+    throw new Refusal(`${branch} is checked out in the main tree. Switch the main tree back to its base first — a branch can be out in one place only.`);
+  }
+  if (holder?.missing) {
+    throw new Refusal(`${branch} is still registered to ${holder.path}, whose folder is gone. Run git worktree prune in ${ctx.main}, then take it again.`);
+  }
+  if (holder && isSlot(ctx, holder)) {
+    throw new Refusal(`${branch} is in the pool slot ${basename(holder.path)}. Work there, or release it first: workspace.mjs release ${basename(holder.path)}`);
+  }
+  // Only a worktree Orca made is ours to prepare: copying files and running installs under
+  // another tool's worktree — a live session's, an IDE's — would pull the ground from under it.
+  if (holder && (holder.locked || !orcaWorktrees(ctx)?.has(holder.path))) {
+    throw new Refusal(`${branch} is checked out in ${holder.path}, which Orca did not make${holder.locked ? ' and something holds locked' : ''}. Work there, or free it first.`);
+  }
+  if (holder) {
+    log(`${basename(holder.path)}: resuming ${branch}`);
+    prepare(ctx, { path: holder.path, name: basename(holder.path) }, ownStamps(holder.path));
+    log(`Ready. Switch the session into it with EnterWorktree (path: ${holder.path}), or work under that path.`);
+    console.log(holder.path);
+    return;
+  }
+
+  const local = gitOk(ctx.main, 'show-ref', '--verify', '--quiet', `refs/heads/${branch}`);
+  const remote = !local && gitOk(ctx.main, 'show-ref', '--verify', '--quiet', `refs/remotes/origin/${branch}`);
+  const folder = name ?? folderName(branch, ctx.orca.nameMax);
+  // Orca's CLI cannot reopen a branch that already exists — it would start a suffixed one
+  // from the base instead. So an existing branch goes through a placeholder Orca creates,
+  // and the worktree then switches to the real branch: Orca follows the folder, not the name.
+  const requested = local || remote ? `claudius-tmp/${folder}-${Date.now().toString(36)}` : branch;
+  log(`Creating the Orca worktree ${folder} for ${branch}${local || remote ? '' : ` from ${ref}`}…`);
+  const created = orca(
+    ctx, 'worktree', 'create', '--repo', ctx.orca.repo, '--name', folder, '--branch', requested,
+    '--base-branch', ref, '--no-parent', '--setup', 'skip',
+  )?.worktree;
+  if (!created?.path || !existsSync(created.path)) {
+    throw new Error(`orca worktree create gave no usable path:\n${JSON.stringify(created ?? null)}`);
+  }
+  const path = canonical(created.path);
+  const actual = (created.branch ?? '').replace('refs/heads/', '');
+  if (actual !== branch) {
+    try {
+      if (local) git(path, 'switch', '--quiet', branch);
+      else if (remote) git(path, 'switch', '--quiet', '-c', branch, '--track', `origin/${branch}`);
+      else git(path, 'switch', '--quiet', '-c', branch, '--no-track', ref);
+    } catch (error) {
+      // Typically another session took the same new branch a moment earlier. The worktree
+      // is Orca's and holds nothing yet; say where it is rather than leave it unexplained.
+      log(`Orca made ${path} on ${actual || 'no branch'}, but switching it to ${branch} failed. ` +
+        `Remove it with: orca worktree rm --worktree "path:${created.path}" --delete-branch`);
+      throw error;
+    }
+    if (actual) gitOk(ctx.main, 'branch', '-D', actual);
+  }
+  // Orca's own setup was skipped so the steps run here, before the path is printed: a
+  // session entering the worktree finds its dependencies in place.
+  try {
+    prepare(ctx, { path, name: basename(path) }, ownStamps(path));
+  } catch (error) {
+    log(`The worktree is made (${path}), but preparing it failed. Fix the step, then run prepare inside it.`);
+    throw error;
+  }
+  log(`Ready. Switch the session into it with EnterWorktree (path: ${path}), or work under that path.`);
+  console.log(path);
+}
+
+// `prepare` from inside a worktree: what take would have run there. Orca's setup line for
+// worktrees made in its own window, and a way to catch up after a merge moved the lockfile.
+function prepareHere(ctx) {
+  const repo = locateRepo(ctx.start);
+  if (!repo.linked) {
+    if (ctx.mode !== 'branches') throw new Refusal('Run prepare inside a worktree — the main tree is where copied files come from.');
+    prepare(ctx, { path: ctx.main, name: 'main' });
+    return;
+  }
+  const path = canonical(repo.worktree);
+  const slot = slots(ctx).find((s) => s.path === path);
+  prepare(ctx, { path, name: basename(path) }, slot ? undefined : ownStamps(path));
+  log(`Prepared ${path}.`);
+}
+
 function findSlot(ctx, arg) {
   const all = slots(ctx);
   const slot = arg
@@ -558,6 +734,20 @@ function freeSlot(ctx, slot, { discard = false } = {}) {
 }
 
 function release(ctx, arg, { force = false } = {}) {
+  if (!arg) {
+    const here = worktrees(ctx).slice(1)
+      .find((wt) => !wt.missing && (ctx.start === wt.path || ctx.start.startsWith(wt.path + sep)));
+    // Not a slot — an Orca worktree, Claude Code's own: there is nothing to give back, only
+    // the check that leaving loses nothing.
+    if (here && !isSlot(ctx, here)) {
+      const name = basename(here.path);
+      const reason = unsafeReason(here.path);
+      if (reason) throw new Refusal(`${name}: ${reason}. Push first.`);
+      log(`${name} is clean and pushed. It is not a pool slot, so nothing is freed: it stays for review follow-ups, ` +
+        'and once its pull request merges, sweep or the tool that made it removes it. Leave it with ExitWorktree (action: keep).');
+      return;
+    }
+  }
   const slot = findSlot(ctx, arg);
   const reason = unsafeReason(slot.path);
   if (reason && !force) throw new Refusal(`${slot.name} not released: ${reason}. Push first, or pass --force.`);
@@ -684,11 +874,40 @@ function setMode(ctx, wanted) {
   log(`Mode: ${wanted} — ${next[wanted]}`);
 }
 
+const SESSION_KIND = () => (inOrcaSession() ? 'this session was started by Orca' : 'this session was not started by Orca');
+
+function describeProvider(ctx) {
+  return ctx.providerSetting === 'auto' ? `auto → ${ctx.provider} (${SESSION_KIND()})` : ctx.provider;
+}
+
+function setProvider(ctx, wanted) {
+  if (!wanted) {
+    log(`Provider: ${describeProvider(ctx)}  (${ctx.configPath})`);
+    return;
+  }
+  if (!PROVIDERS.includes(wanted)) throw new Refusal(`Unknown provider "${wanted}". Use ${PROVIDERS.join(', ')}.`);
+  if (wanted === ctx.providerSetting) {
+    log(`Already ${wanted}.`);
+    return;
+  }
+  writeFileSync(ctx.configPath, `${JSON.stringify({ ...ctx.raw, provider: wanted }, null, 2)}\n`);
+  const next = {
+    pool: 'take claims a slot of the pool.',
+    orca: 'take creates an Orca worktree through the orca CLI.',
+    auto: 'take uses Orca in sessions Orca started, the pool in the CLI and Claude Desktop.',
+  };
+  log(`Provider: ${wanted} — ${next[wanted]}`);
+  if (ctx.mode !== 'worktrees') log(`Note: the provider applies in worktrees mode; this repository is in ${ctx.mode} mode.`);
+}
+
 function status(ctx) {
   if (ctx.mode === 'branches') {
     const branch = git(ctx.main, 'branch', '--show-current') || '(detached)';
     log(`Mode: branches — ${ctx.main} on ${branch}, ${unsafeReason(ctx.main) ?? 'clean and pushed'}.`);
+  } else if (ctx.mode === 'worktrees') {
+    log(`Mode: worktrees — provider ${describeProvider(ctx)}.`);
   }
+  const orcaPaths = orcaWorktrees(ctx);
   const prs = pullRequestsByBranch(ctx);
   const rows = worktrees(ctx).slice(1).map((wt) => {
     const name = basename(wt.path);
@@ -707,7 +926,7 @@ function status(ctx) {
     const claim = slot ? readClaim(ctx, name) : null;
     const pr = wt.branch ? prs.get(wt.branch) : null;
     return {
-      worktree: slot ? name : `(other) ${relative(ctx.main, wt.path) || wt.path}`,
+      worktree: slot ? name : orcaPaths?.has(wt.path) ? `(orca) ${name}` : `(other) ${relative(ctx.main, wt.path) || wt.path}`,
       state: slot ? claimState(claim) : (wt.locked ? 'locked' : ''),
       branch: wt.branch ?? '(detached)',
       changes: git(wt.path, 'status', '--porcelain').split(/\r?\n/).filter(Boolean).length,
@@ -722,6 +941,7 @@ function status(ctx) {
 
 function sweep(ctx, { yes = false } = {}) {
   const prs = pullRequestsByBranch(ctx);
+  const orcaPaths = orcaWorktrees(ctx);
   let planned = 0;
   let gone = 0;
   for (const wt of worktrees(ctx).slice(1)) {
@@ -742,7 +962,25 @@ function sweep(ctx, { yes = false } = {}) {
     const merged = coverage === 'covers';
     // Another tool's worktree — Claude Code's, an IDE's — is listed, never removed: that
     // tool keeps its own record of it, and a folder deleted underneath it leaves the tool
-    // pointing at nothing.
+    // pointing at nothing. Orca's are the exception once Orca is a provider: Orca itself
+    // removes them, so its record goes with the folder.
+    if (!slot && merged && orcaPaths?.has(wt.path)) {
+      const reason = unsafeReason(wt.path);
+      if (reason) {
+        log(`SKIP ${name} (${wt.branch}, PR ${pr.number} merged): ${reason} — check by hand.`);
+        continue;
+      }
+      planned++;
+      log(`${yes ? '' : '[dry run] '}remove Orca worktree ${name} — ${wt.branch}, PR ${pr.number} merged`);
+      if (!yes) continue;
+      try {
+        orca(ctx, 'worktree', 'rm', '--worktree', `path:${orcaPaths.get(wt.path)}`);
+        git(ctx.main, 'branch', '-D', wt.branch);
+      } catch (error) {
+        log(`FAILED ${name}: ${error.message.split('\n').pop()}`);
+      }
+      continue;
+    }
     if (!slot) {
       if (merged) log(`LEAVE ${name} (${wt.branch}, PR ${pr.number} merged): not a slot of this pool — remove it with the tool that created it.`);
       continue;
@@ -793,6 +1031,10 @@ function init(start, opts) {
     if (!MODES.includes(opts.mode)) throw new Refusal(`Unknown mode "${opts.mode}". Use ${MODES.join(', ')}.`);
     config.mode = opts.mode;
   }
+  if (opts.provider !== undefined) {
+    if (!PROVIDERS.includes(opts.provider)) throw new Refusal(`Unknown provider "${opts.provider}". Use ${PROVIDERS.join(', ')}.`);
+    config.provider = opts.provider;
+  }
   if (opts.pool !== undefined) { config.pool = opts.pool; reasons.pool = 'given'; }
   if (opts.prefix !== undefined) config.prefix = opts.prefix;
   if (opts.size !== undefined) {
@@ -809,7 +1051,7 @@ function init(start, opts) {
     throw new Refusal(`"prefix" must be a plain folder name (letters, digits, dots, dashes), got "${config.prefix}".`);
   }
   if (config.mode === 'branches') {
-    for (const key of ['pool', 'prefix', 'size', 'keep', 'copy']) delete config[key];
+    for (const key of ['pool', 'prefix', 'size', 'keep', 'copy', 'provider']) delete config[key];
   }
 
   for (const [key, why] of Object.entries(reasons)) if (key in config) log(`  ${key.padEnd(8)} ${why}`);
@@ -838,7 +1080,7 @@ function readHookInput() {
 const [command = 'status', ...rest] = process.argv.slice(2);
 const flag = (name) => rest.includes(name);
 const option = (name) => (rest.includes(name) ? rest[rest.indexOf(name) + 1] : undefined);
-const VALUED = new Set(['--base', '--mode', '--pool', '--prefix', '--size', '--protect']);
+const VALUED = new Set(['--base', '--name', '--mode', '--provider', '--pool', '--prefix', '--size', '--protect']);
 const positional = rest.find((arg, i) => !arg.startsWith('--') && !VALUED.has(rest[i - 1]));
 
 if (command === 'session-end') {
@@ -855,7 +1097,7 @@ if (command === 'session-end') {
 if (command === 'init') {
   try {
     init(process.cwd(), {
-      mode: option('--mode'), pool: option('--pool'), prefix: option('--prefix'), size: option('--size'),
+      mode: option('--mode'), provider: option('--provider'), pool: option('--pool'), prefix: option('--prefix'), size: option('--size'),
       base: option('--base'), protect: option('--protect'), dryRun: flag('--dry-run'), force: flag('--force'),
     });
     process.exit(0);
@@ -867,6 +1109,8 @@ if (command === 'init') {
 
 try {
   const ctx = loadContext(process.cwd());
+  // `provider <valid>` is how a bad value gets fixed, so it alone may run past one.
+  if (ctx.configError && !(command === 'provider' && PROVIDERS.includes(positional))) throw new Refusal(ctx.configError);
   if (ctx.mode === 'off' && ['take', 'release'].includes(command)) {
     throw new Refusal('The workspace is off for this repository. Turn it on with: workspace.mjs mode worktrees (or branches)');
   }
@@ -874,15 +1118,18 @@ try {
     case 'status': status(ctx); break;
     case 'take':
       if (ctx.mode === 'branches') takeBranch(ctx, positional, { base: option('--base') });
+      else if (ctx.provider === 'orca') takeOrca(ctx, positional, { base: option('--base'), name: option('--name') });
       else take(ctx, positional, { base: option('--base') });
       break;
+    case 'prepare': prepareHere(ctx); break;
+    case 'provider': setProvider(ctx, positional); break;
     case 'release':
       if (ctx.mode === 'branches' && !positional) releaseBranch(ctx);
       else release(ctx, positional, { force: flag('--force') });
       break;
     case 'mode': setMode(ctx, positional); break;
     case 'sweep': sweep(ctx, { yes: flag('--yes') }); break;
-    default: throw new Refusal(`Unknown command: ${command}. Use init, status, take, release, mode or sweep.`);
+    default: throw new Refusal(`Unknown command: ${command}. Use init, status, take, release, prepare, mode, provider or sweep.`);
   }
 } catch (error) {
   log(error.message);

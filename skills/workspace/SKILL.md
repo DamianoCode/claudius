@@ -1,7 +1,7 @@
 ---
 name: workspace
-description: Isolate work in progress the way a repository has opted in to — a worktree slot from a reusable pool, or a branch of the main checkout. Use only in a repository whose session start printed a [workspace] line, when an edit was refused as shared ground, or when the user explicitly asks to set up, switch, pause, check or clean up this workspace ("skonfiguruj workspace", "tryb pracy", "worktree slot", "posprzątaj worktree"). Never to push this workflow onto a repository that has its own.
-argument-hint: "[init | take <branch> | release | mode <worktrees|branches|off> | status | sweep]"
+description: Isolate work in progress the way a repository has opted in to — a worktree slot from a reusable pool, an Orca worktree, or a branch of the main checkout. Use only in a repository whose session start printed a [workspace] line, when an edit was refused as shared ground, or when the user explicitly asks to set up, switch, pause, check or clean up this workspace ("skonfiguruj workspace", "tryb pracy", "worktree slot", "posprzątaj worktree"). Never to push this workflow onto a repository that has its own.
+argument-hint: "[init | take <branch> | release | prepare | mode <worktrees|branches|off> | provider <pool|orca|auto> | status | sweep]"
 ---
 
 # Workspace
@@ -23,6 +23,20 @@ The CLI is `bin/workspace.mjs` in this plugin, two directories above this file; 
 
 When a session ends, its slots return to the pool on their own if nothing in them would be lost. A crashed session's slot is reclaimed by the next `take` once clean and pushed, and otherwise shows as `orphaned` until its branch is taken again.
 
+### Who creates the worktrees: `provider`
+
+`"provider"` in `workspace.json` picks it: `pool` (the slots above, the default), `orca` (the Orca desktop app, through its `orca` CLI), or `auto` — Orca in a session Orca started (it sets `CLAUDE_CODE_ENTRYPOINT=orca`), the pool in the CLI and Claude Desktop. The session-start line says which one applies. Switch it with `provider <pool|orca|auto>`, only when the user asks.
+
+With Orca the steps are the same, and only what happens under them changes:
+
+- `take <branch>` creates one worktree per branch with `orca worktree create` — from the configured base, newest match of a glob included, in Orca's own worktree folder, named after the branch without its type prefix (`--name` overrides it; `orca.nameMax`, default 24, keeps Windows paths short). It runs the `copy` and `prepare` steps itself before printing the path. A branch that already exists is reopened as it is; a branch already out in a worktree is resumed there.
+- `EnterWorktree` into the printed path, as with a slot.
+- `release` only checks that the work is committed and pushed — there is nothing to give back. The worktree stays for review follow-ups.
+- After the pull request merges, `sweep --yes` removes the worktree through Orca and deletes the branch; Orca's own cleanup rules may do it first.
+- A worktree made in Orca's window gets the same steps when Orca's setup line for the repository is `node <plugin>/bin/workspace.mjs prepare`.
+
+`"orca": { "repo": "name:<Orca project>" }` names the repository for Orca (default `path:<main tree>`), and `"cli"` points at the CLI when it is not on PATH.
+
 ## branches mode
 
 1. **Start a branch before the first edit**: `node <plugin>/bin/workspace.mjs take <branch-name>`. It refuses while the checkout has uncommitted changes, so one task's edits never travel onto another's branch. Commit them, or ask the user.
@@ -34,7 +48,9 @@ The edit guard refuses protected paths while the checkout sits on a protected br
 
 `release` refuses while anything is uncommitted or unpushed. In worktrees mode `release --force` discards that work — the user's call, never a way past the refusal; branches mode has no override. A released branch stays, so an open pull request resumes with `take <same-branch>`.
 
-`status` shows the mode, every slot and worktree with its pull request. `sweep` lists slots whose pull request has merged or whose session has ended; `sweep --yes` frees them. Worktrees the pool did not create — Claude Code's own, an IDE's such as Orca's — are only listed (`LEAVE`), never removed: the tool that made them cleans them up. Entries whose folder is gone show as `GONE`; `sweep --yes` prunes them. Freeing is the user's call — show the dry run first.
+`status` shows the mode, the provider, every slot and worktree with its pull request. `sweep` lists slots whose pull request has merged or whose session has ended; `sweep --yes` frees them. Worktrees the pool did not create — Claude Code's own, an IDE's — are only listed (`LEAVE`), never removed: the tool that made them cleans them up. Orca's are the exception while the provider is `orca` or `auto`: `sweep --yes` removes the merged ones through Orca itself, so its record goes with the folder.
+
+`prepare`, run inside a worktree, does what `take` would have done there: copies what is missing and runs the `prepare` steps whose files changed. Use it after a merge moved the lockfile or a schema. Entries whose folder is gone show as `GONE`; `sweep --yes` prunes them. Freeing is the user's call — show the dry run first.
 
 `mode` prints the current mode; `mode worktrees` / `mode branches` / `mode off` switches it in the private config. Switch only when the user asks.
 
@@ -51,6 +67,7 @@ The fields, for editing by hand:
 
 - `main` — the main tree this config belongs to, written by `init`. The overlay folder is named only after the repository's folder name, so a config without `main`, or naming another repository, is ignored: a cloned repository that shares the name must never run this one's `prepare` steps. Add it by hand to a config from before it existed — only for the repository the config was made for.
 - `mode` — `worktrees` (default), `branches` or `off`.
+- `provider` — worktrees mode: `pool` (default), `orca` or `auto`; see "Who creates the worktrees". `orca` — `{ "repo", "cli", "nameMax" }` for the Orca CLI.
 - `pool` — the folder slots live in, relative to the main tree; `../<repo>-worktrees` when absent. `.claude/worktrees` removes the approval prompt on entry and allows jumping between slots, at the price of slots inside the repository and paths about 26 characters longer. A pool inside the repository is refused when any folder on its path is a link, since the checked-out branch decides where a link leads.
 - `prefix` — slot folders are named `<prefix>-1`, `<prefix>-2`, …; `slot` when absent.
 - `size` — how many sessions really run at once. Each slot holds a full dependency tree.
