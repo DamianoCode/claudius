@@ -34,6 +34,7 @@ With Orca the steps are the same, and only what happens under them changes:
 - `release` only checks that the work is committed and pushed — there is nothing to give back. The worktree stays for review follow-ups.
 - After the pull request merges, `sweep --yes` removes the worktree through Orca and deletes the branch; Orca's own cleanup rules may do it first.
 - A worktree made in Orca's window gets the same steps when Orca's setup line for the repository is `node <plugin>/bin/workspace.mjs prepare`.
+- Work moves between the two freely. With `auto`, a CLI session's `take` of a branch already out in a worktree Orca made resumes it there instead of refusing; a session that starts inside a task's worktree — Orca opened it there, or the user did — works on that branch and takes nothing. The session-start line names the branch then.
 
 `"orca": { "repo": "name:<Orca project>" }` names the repository for Orca (default `path:<main tree>`), and `"cli"` points at the CLI when it is not on PATH.
 

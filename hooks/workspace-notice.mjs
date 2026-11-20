@@ -36,17 +36,27 @@ if (!config) {
 
 const name = basename(repo.main);
 const orca = config.mode === 'worktrees' && activeProvider(config) === 'orca';
+// A session that starts in a worktree made for one task (by Orca, an IDE, by hand) is already
+// where that task's work belongs: taking another branch would split the work from the session.
+const ownBranch = (path) => {
+  const branch = currentBranch(path);
+  return branch
+    ? ` Its branch ${branch} is this task's branch: build on it, and take no other for the same task.`
+    : '';
+};
 let line;
 if (repo.linked && orca && !isPoolSlot(repo.worktree)) {
   line =
     `This session runs in the worktree ${basename(repo.worktree)} of ${name}. Work here as usual; ` +
-    `it stays until its pull request merges, then ${workspaceCommand('sweep')} or Orca's cleanup removes it.`;
+    `it stays until its pull request merges, then ${workspaceCommand('sweep')} or Orca's cleanup removes it.` +
+    ownBranch(repo.worktree);
 } else if (repo.linked && !isPoolSlot(repo.worktree)) {
   // Claude Code's own worktree, an IDE's, a hand-made one: the pool neither made it nor
   // frees it, so release would only refuse here.
   line =
     `This session runs in the worktree ${basename(repo.worktree)} of ${name}, which is not a slot of its pool. ` +
-    'Work here as usual; the tool that created it also cleans it up.';
+    'Work here as usual; the tool that created it also cleans it up.' +
+    ownBranch(repo.worktree);
 } else if (repo.linked) {
   line =
     `This session runs in the worktree ${basename(repo.worktree)} of ${name}. ` +

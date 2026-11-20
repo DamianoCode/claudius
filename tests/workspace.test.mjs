@@ -174,6 +174,8 @@ test("the notice tells a slot from another tool's worktree", () => {
     const spoken = runHook('workspace-notice.mjs', { cwd: foreign }, { env: w.env }).stdout;
     assert.match(spoken, /ide-task of main, which is not a slot/);
     assert.doesNotMatch(spoken, /release/);
+    assert.match(spoken, /Its branch feat\/ide is this task's branch/, 'the session is told not to take another branch');
+    assert.doesNotMatch(runHook('workspace-notice.mjs', { cwd: slotPath }, { env: w.env }).stdout, /this task's branch/);
   });
 });
 
@@ -1356,6 +1358,39 @@ test('provider orca: a branch out in a worktree Orca did not make is refused, no
     const status = slot(w, ['status'], w.main, { env: tools.env });
     assert.match(status.stdout, /\(other\)/);
     assert.doesNotMatch(status.stdout, /\(orca\)/);
+  });
+});
+
+test('provider auto: a CLI session goes on with a task started in Orca, in the worktree Orca made', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const marker = join(boundary, 'prepared.log').replaceAll('\\', '/');
+    const w = world(boundary, { provider: 'auto', prepare: [{ run: `node -e "require('fs').appendFileSync('${marker}','x')"` }] });
+    const tools = fakeTools(boundary, w.env);
+    const inOrca = { ...tools.env, CLAUDE_CODE_ENTRYPOINT: 'orca' };
+    const made = lastLine(slot(w, ['take', 'feat/it-1187-oferta'], w.main, { env: inOrca }).stdout);
+    writeFileSync(marker, '');
+
+    const cli = slot(w, ['take', 'feat/it-1187-oferta'], w.main, { env: tools.env });
+    assert.equal(cli.status, 0, cli.stderr);
+    assert.equal(canonical(lastLine(cli.stdout)), canonical(made), 'the CLI session is sent to the Orca worktree');
+    assert.match(cli.stderr, /resuming feat\/it-1187-oferta/);
+    assert.equal(readFileSync(marker, 'utf8'), 'x', 'it is prepared like a resumed Orca worktree');
+    assert.ok(!existsSync(w.pool), 'no pool slot is taken for it');
+    assert.equal(orcaCalls(tools).filter((call) => call[1] === 'create').length, 1, 'nothing new is created');
+  });
+});
+
+test('provider pool: a branch out in a worktree outside the pool is still refused, Orca or not', () => {
+  withTmpDir('claudius-pool-', (boundary) => {
+    const w = world(boundary, {});
+    const tools = fakeTools(boundary, w.env);
+    const hand = join(tools.base, 'hand-made');
+    git(w.main, 'worktree', 'add', '-q', '-b', 'feat/hand', hand, 'origin/main');
+
+    const result = slot(w, ['take', 'feat/hand'], w.main, { env: tools.env });
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /outside the pool/);
+    assert.deepEqual(orcaCalls(tools), [], 'the pool provider never asks Orca');
   });
 });
 
