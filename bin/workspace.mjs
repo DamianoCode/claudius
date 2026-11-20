@@ -545,6 +545,16 @@ function take(ctx, branch, { base } = {}) {
   gitOk(ctx.main, 'fetch', '--prune', '--quiet', 'origin');
   const ref = baseRef(ctx, base);
 
+  // A pool session going on with a task that was started in Orca: the branch is out in the
+  // worktree Orca made for it, and so is the work. Any other holder outside the pool is still
+  // refused below — preparing under another tool's worktree would pull the ground from under it.
+  if (branch) {
+    const holder = worktrees(ctx).slice(1).find((wt) => wt.branch === branch);
+    if (holder && !holder.missing && !holder.locked && !isSlot(ctx, holder) && orcaWorktrees(ctx)?.has(holder.path)) {
+      return resumeOrcaWorktree(ctx, holder, branch);
+    }
+  }
+
   const slot = withMutex(ctx, () => {
     for (const s of slots(ctx)) lockAndMark(ctx, s);
     const chosen = (branch && slotHoldingBranch(ctx, branch)) || pickSlot(ctx, ref);
@@ -631,6 +641,16 @@ function folderName(branch, max) {
   return tail.replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, max).replace(/[-.]+$/, '') || 'work';
 }
 
+// A branch already out in a worktree Orca made is continued there: prepared like a fresh one,
+// then handed to the session. Both providers use it, so a task started in Orca can go on from
+// a CLI session, and the other way round.
+function resumeOrcaWorktree(ctx, holder, branch) {
+  log(`${basename(holder.path)}: resuming ${branch}`);
+  prepare(ctx, { path: holder.path, name: basename(holder.path) }, ownStamps(holder.path));
+  log(`Ready. Switch the session into it with EnterWorktree (path: ${holder.path}), or work under that path.`);
+  console.log(holder.path);
+}
+
 function takeOrca(ctx, branch, { base, name } = {}) {
   if (!branch) throw new Refusal('Name the branch: take <branch-name>. An Orca worktree is made for one branch.');
   gitOk(ctx.main, 'fetch', '--prune', '--quiet', 'origin');
@@ -653,13 +673,7 @@ function takeOrca(ctx, branch, { base, name } = {}) {
   if (holder && (holder.locked || !orcaWorktrees(ctx)?.has(holder.path))) {
     throw new Refusal(`${branch} is checked out in ${holder.path}, which Orca did not make${holder.locked ? ' and something holds locked' : ''}. Work there, or free it first.`);
   }
-  if (holder) {
-    log(`${basename(holder.path)}: resuming ${branch}`);
-    prepare(ctx, { path: holder.path, name: basename(holder.path) }, ownStamps(holder.path));
-    log(`Ready. Switch the session into it with EnterWorktree (path: ${holder.path}), or work under that path.`);
-    console.log(holder.path);
-    return;
-  }
+  if (holder) return resumeOrcaWorktree(ctx, holder, branch);
 
   const local = gitOk(ctx.main, 'show-ref', '--verify', '--quiet', `refs/heads/${branch}`);
   const remote = !local && gitOk(ctx.main, 'show-ref', '--verify', '--quiet', `refs/remotes/origin/${branch}`);

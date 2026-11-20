@@ -2,8 +2,8 @@
 // bin/workspace.mjs owns the full format; the hooks need the mode, the protected paths
 // and — in branch mode — which branches must not be edited directly.
 
-import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { canonical, overlayDir } from './repo.mjs';
@@ -125,7 +125,14 @@ export function matchesAny(branch, patterns) {
 // The branch checked out in a main tree, read from .git/HEAD; null when detached.
 export function currentBranch(mainTree) {
   try {
-    const head = readFileSync(join(mainTree, '.git', 'HEAD'), 'utf8').trim();
+    // In a linked worktree `.git` is a file naming its admin folder, where its own HEAD lives.
+    let gitDir = join(mainTree, '.git');
+    if (statSync(gitDir).isFile()) {
+      const pointer = /^gitdir:\s*(.+)$/m.exec(readFileSync(gitDir, 'utf8'))?.[1]?.trim();
+      if (!pointer) return null;
+      gitDir = isAbsolute(pointer) ? pointer : resolve(mainTree, pointer);
+    }
+    const head = readFileSync(join(gitDir, 'HEAD'), 'utf8').trim();
     return head.startsWith('ref: refs/heads/') ? head.slice('ref: refs/heads/'.length) : null;
   } catch {
     return null;
